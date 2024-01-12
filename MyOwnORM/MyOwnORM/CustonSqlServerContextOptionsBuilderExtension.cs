@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace MyOwnORM
 {
-    public class CustonSqlServerContextOptionsBuilderExtension
+    public static class CustonSqlServerContextOptionsBuilderExtension
     {
-        public void UseSqlServer(string connectionString)
+        public static void UseSqlServer(string connectionString)
         {
             using(SqlConnection connection = new SqlConnection(connectionString))
             {

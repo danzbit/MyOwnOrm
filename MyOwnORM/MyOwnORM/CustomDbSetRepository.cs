@@ -5,22 +5,25 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace MyOwnORM
 {
-    public class CustomDbSetRepository<T> : CustomDbSetReflection<T> where T : class
+    public class CustomDbSetRepository<T> : ICustomDbSetRepository<T> where T : class
     {
         private string _connectionString;
         private string tableName;
         private string query;
-        private CustomDbSetExtension dbSetExtension;
+        private CustomDbSetService<T> dbSetExtension;
+        private CustomDbSetReflection<T> dbSetReflection;
         public CustomDbSetRepository(string connectionString) 
         {
             _connectionString = connectionString;
             tableName = typeof(T).Name;
-            dbSetExtension = new CustomDbSetExtension(_connectionString);
+            dbSetExtension = new CustomDbSetService<T>(_connectionString);
+            dbSetReflection = new CustomDbSetReflection<T>();
         }
         public IEnumerable<T> GetAll()
         {
@@ -38,7 +41,7 @@ namespace MyOwnORM
                     {
                         while (reader.Read())
                         {
-                            T entity = MapReaderToEntity(reader);
+                            T entity = dbSetReflection.MapReaderToEntity(reader);
                             entities.Add(entity);
                         }
                     }
@@ -52,8 +55,8 @@ namespace MyOwnORM
         {
             List<T> entities = new List<T>();
 
-            string propVal = GetPropertyValue(include);
-            dynamic includeType = GetIncludeType(include);
+            string propVal = dbSetExtension.GetPropertyValue(include);
+            dynamic includeType = dbSetReflection.GetIncludeType(include);
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -68,7 +71,7 @@ namespace MyOwnORM
                 {
                     while (reader.Read())
                     {
-                        T entity = Activator.CreateInstance<T>();
+                        T entity = dbSetReflection.CreateInstanceType();
 
                         foreach (var property in typeof(T).GetProperties())
                         {
@@ -81,109 +84,7 @@ namespace MyOwnORM
                             }
                             catch (IndexOutOfRangeException)
                             {
-                                if (property.PropertyType.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)) && property.Name == propVal)
-                                {
-                                    Type elementType = property.PropertyType.GetGenericArguments()[0];
-                                    Type listType = typeof(List<>).MakeGenericType(elementType);
-                                    IList entitiesSecond = (IList)Activator.CreateInstance(listType);
-                                    T type = Activator.CreateInstance<T>();
-                                    string fkAttribute = GetForeignKeyAttribute(type.GetType());
-                                    string fk = $"{typeof(T).Name}Id";
-                                    string fkChoose = string.IsNullOrEmpty(fkAttribute) ? fk : fkAttribute;
-                                    using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
-                                    {
-                                        connectionSecond.Open();
-
-                                        string query = $"SELECT * FROM {property.Name} WHERE {fkChoose} = @Id";
-
-                                        using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
-                                        {
-                                            commandSecond.Parameters.AddWithValue("@Id", idValue);
-
-                                            using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
-                                            {
-                                                while (readerSecond.Read())
-                                                {
-                                                    object entitySecond = Activator.CreateInstance(elementType);
-
-                                                    PropertyInfo[] properties = elementType.GetProperties();
-
-                                                    foreach (PropertyInfo propertySecond in properties)
-                                                    {
-                                                        string propertyNameSecond = propertySecond.Name;
-
-
-                                                        int ordinalSecond;
-
-                                                        try
-                                                        {
-                                                            ordinalSecond = readerSecond.GetOrdinal(propertyNameSecond);
-                                                        }
-                                                        catch (IndexOutOfRangeException e)
-                                                        {
-                                                            continue;
-                                                        }
-
-                                                        object valueSecond = readerSecond.GetValue(ordinalSecond);
-
-                                                        propertySecond.SetValue(entitySecond, valueSecond);
-                                                    }
-                                                    entitiesSecond.Add(entitySecond);
-                                                }
-                                                property.SetValue(entity, entitiesSecond);
-                                            }
-                                        }
-                                    }
-                                }
-                                else if (includeType.GetType().IsAssignableFrom(property.PropertyType) && propVal == includeType.GetType().Name && property.Name == includeType.GetType().Name)
-                                {
-                                    string fkAttribute = GetForeignKeyAttribute(includeType);
-                                    string fk = $"{typeof(T).Name}Id";
-                                    string fkChoose = string.IsNullOrEmpty(fkAttribute) ? fk : fkAttribute;
-                                    using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
-                                    {
-                                        connectionSecond.Open();
-
-                                        string query = $"SELECT * FROM {includeType.GetType().Name} WHERE {fkChoose} = @Id";
-
-                                        using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
-                                        {
-                                            commandSecond.Parameters.AddWithValue("@Id", idValue);
-
-                                            using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
-                                            {
-                                                while (readerSecond.Read())
-                                                {
-                                                    dynamic entitySecond = Activator.CreateInstance(includeType.GetType());
-
-                                                    PropertyInfo[] properties = includeType.GetType().GetProperties();
-
-                                                    foreach (PropertyInfo propertySecond in properties)
-                                                    {
-                                                        string propertyNameSecond = propertySecond.Name;
-
-
-                                                        int ordinalSecond;
-
-                                                        try
-                                                        {
-                                                            ordinalSecond = readerSecond.GetOrdinal(propertyNameSecond);
-                                                        }
-                                                        catch (IndexOutOfRangeException e)
-                                                        {
-                                                            continue;
-                                                        }
-
-                                                        object valueSecond = readerSecond.GetValue(ordinalSecond);
-
-                                                        propertySecond.SetValue(entitySecond, valueSecond);
-                                                    }
-                                                    property.SetValue(entity, entitySecond);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                FindSetMethod(property, idValue, entity, propVal, includeType);
                                 continue;
                             }
 
@@ -192,20 +93,14 @@ namespace MyOwnORM
                             if (propertyName == "Id")
                                 idValue = value.ToString();
 
-
                             property.SetValue(entity, value);
-
                         }
-
                         entities.Add(entity);
                     }
                 }
             }
-
             return entities;
         }
-
-
 
         public IEnumerable<T> Include(Expression<Func<T, object>>[] includes)
         {
@@ -224,143 +119,27 @@ namespace MyOwnORM
                 {
                     while (reader.Read())
                     {
-                        T entity = Activator.CreateInstance<T>();
+                        T entity = dbSetReflection.CreateInstanceType();
 
-                        foreach (var property in typeof(T).GetProperties())
-                        {
-                            string propertyName = property.Name;
-
-                            int ordinal;
-                            try
-                            {
-                                ordinal = reader.GetOrdinal(propertyName);
-                            }
-                            catch (IndexOutOfRangeException)
-                            {
-                                continue;
-                            }
-
-                            object value = reader.GetValue(ordinal);
-
-                            if (propertyName == "Id")
-                                idValue = value.ToString();
-
-                            property.SetValue(entity, value);
-                        }
+                        dbSetReflection.SetPropertiesForIncludeExpressionsMethod(reader, idValue, entity);
 
                         foreach (var include in includes)
                         {
-                            List<string> propVal = GetPropertyValues(new Expression<Func<T, object>>[] { include });
-                            dynamic[] includeType = GetIncludeTypes(new Expression<Func<T, object>>[] { include });
+                            List<string> propVal = dbSetReflection.GetPropertyValues(new Expression<Func<T, object>>[] { include });
+                            dynamic[] includeType = dbSetReflection.GetIncludeTypes(new Expression<Func<T, object>>[] { include });
 
                             for (int i = 0; i < propVal.Count; i++)
                             {
-                                PropertyInfo propertyInfo = typeof(T).GetProperty(propVal[i]);
+                                PropertyInfo propertyInfo = dbSetReflection.GetPropertyInfo(propVal[i]);
                                 Type propertyType = propertyInfo.PropertyType;
 
-                                if (IsCollectionType(propertyInfo))
+                                if (dbSetReflection.IsCollectionType(propertyInfo))
                                 {
-                                    Type elementType = propertyType.GetGenericArguments()[0];
-                                    Type listType = typeof(List<>).MakeGenericType(elementType);
-                                    IList entitiesSecond = (IList)Activator.CreateInstance(listType);
-
-                                    string fkAttribute = GetForeignKeyAttribute(includeType[i]);
-                                    string fk = $"{entity}Id";
-                                    string fkChoose = string.IsNullOrEmpty(fkAttribute) ? fk : fkAttribute;
-
-                                    using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
-                                    {
-                                        connectionSecond.Open();
-
-                                        string query = $"SELECT * FROM {propertyInfo.Name} WHERE {fkChoose} = @Id";
-
-                                        using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
-                                        {
-                                            commandSecond.Parameters.AddWithValue("@Id", idValue);
-
-                                            using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
-                                            {
-                                                while (readerSecond.Read())
-                                                {
-                                                    object entitySecond = Activator.CreateInstance(elementType);
-
-                                                    PropertyInfo[] properties = elementType.GetProperties();
-
-                                                    foreach (PropertyInfo propertySecond in properties)
-                                                    {
-                                                        string propertyNameSecond = propertySecond.Name;
-
-                                                        int ordinalSecond;
-
-                                                        try
-                                                        {
-                                                            ordinalSecond = readerSecond.GetOrdinal(propertyNameSecond);
-                                                        }
-                                                        catch (IndexOutOfRangeException)
-                                                        {
-                                                            continue;
-                                                        }
-
-                                                        object valueSecond = readerSecond.GetValue(ordinalSecond);
-                                                        propertySecond.SetValue(entitySecond, valueSecond);
-                                                    }
-
-                                                    entitiesSecond.Add(entitySecond);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    propertyInfo.SetValue(entity, entitiesSecond);
+                                    SetGenericEntityIncludeExpressionsMethod(propertyInfo, entity, includeType[i], idValue, reader);
                                 }
                                 else
                                 {
-                                    string fkAttribute = GetForeignKeyAttribute(includeType[i]);
-                                    string fk = $"{entity}Id";
-                                    string fkChoose = string.IsNullOrEmpty(fkAttribute) ? fk : fkAttribute;
-
-                                    using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
-                                    {
-                                        connectionSecond.Open();
-
-                                        string query = $"SELECT * FROM {propertyInfo.Name} WHERE {fkChoose} = @Id";
-
-                                        using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
-                                        {
-                                            commandSecond.Parameters.AddWithValue("@Id", idValue);
-
-                                            using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
-                                            {
-                                                while (readerSecond.Read())
-                                                {
-                                                    dynamic entitySecond = Activator.CreateInstance(propertyType);
-
-                                                    PropertyInfo[] properties = propertyType.GetProperties();
-
-                                                    foreach (PropertyInfo propertySecond in properties)
-                                                    {
-                                                        string propertyNameSecond = propertySecond.Name;
-
-                                                        int ordinalSecond;
-
-                                                        try
-                                                        {
-                                                            ordinalSecond = readerSecond.GetOrdinal(propertyNameSecond);
-                                                        }
-                                                        catch (IndexOutOfRangeException)
-                                                        {
-                                                            continue;
-                                                        }
-
-                                                        object valueSecond = readerSecond.GetValue(ordinalSecond);
-                                                        propertySecond.SetValue(entitySecond, valueSecond);
-                                                    }
-
-                                                    propertyInfo.SetValue(entity, entitySecond);
-                                                }
-                                            }
-                                        }
-                                    }
+                                    SetEntityIncludeExpressionsMethod(includeType[i], entity, propertyInfo, idValue, reader, propertyType);
                                 }
                             }
                         }
@@ -369,7 +148,6 @@ namespace MyOwnORM
                     }
                 }
             }
-
             return entities;
         }
 
@@ -380,8 +158,8 @@ namespace MyOwnORM
             {
                 connection.Open();
 
-                string key = GetKeyInLambdaExpression(predicate);
-                dynamic val = GetValueInLambdaExpression(predicate);
+                string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
+                dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
 
                 query = $"SELECT * FROM {tableName} WHERE {key} = {val}";
                 using (SqlCommand command = new SqlCommand(query, connection))
@@ -390,7 +168,7 @@ namespace MyOwnORM
                     {
                         while (reader.Read())
                         {
-                            T entity = MapReaderToEntity(reader);
+                            T entity = dbSetReflection.MapReaderToEntity(reader);
                             entities.Add(entity);
                         }
                     }
@@ -403,7 +181,7 @@ namespace MyOwnORM
         public T GetById(dynamic id)
         {
             T entity = Activator.CreateInstance<T>();
-            string idProperty = GetIdProperty(entity);
+            string idProperty = dbSetReflection.GetIdProperty(entity);
 
             if (string.IsNullOrEmpty(idProperty)) 
                 throw new NullReferenceException(nameof(idProperty));
@@ -419,7 +197,7 @@ namespace MyOwnORM
                     {
                         if (reader.Read())
                         {
-                            T type = MapReaderToEntity(reader);
+                            T type = dbSetReflection.MapReaderToEntity(reader);
                             entity = type;
                         }
                     }
@@ -434,7 +212,7 @@ namespace MyOwnORM
             {
                 connection.Open();
 
-                string values = MapEntityPropertyValuesInString(obj);
+                string values = dbSetReflection.MapEntityPropertyValuesInString(obj);
 
                 query = $"INSERT INTO {tableName} VALUE ({values})";
 
@@ -444,15 +222,15 @@ namespace MyOwnORM
         }
         public void InsertCascade(T obj)
         {
-            string[] names = GetNamesOfCollectionOrModel();
+            string[] names = dbSetReflection.GetNamesOfCollectionOrModel();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
                 bool hasRowInDataBase = false;
                 connection.Open();
 
-                string values = MapEntityPropertyValuesInString(obj, names);
-                string idNameEntity = GetIdProperty(obj);
-                string idEntity = GetIdPropertyValue(obj);
+                string values = dbSetReflection.MapEntityPropertyValuesInString(obj, names);
+                string idNameEntity = dbSetReflection.GetIdProperty(obj);
+                string idEntity = dbSetReflection.GetIdPropertyValue(obj);
 
                 string checkQuery = $"SELECT * FROM {typeof(T).Name} WHERE {idNameEntity} = {idEntity}";
 
@@ -480,7 +258,7 @@ namespace MyOwnORM
                     command.ExecuteNonQuery();
                 }
 
-                string[] queries = InsertCascadeModelsOrCollection(obj, names);
+                string[] queries = dbSetReflection.InsertCascadeModelsOrCollection(obj, names);
 
                 for (int i = 0; i < queries.Length; i++)
                 {
@@ -492,7 +270,7 @@ namespace MyOwnORM
         }
         public void Update(T obj)
         {
-            string idProperty = GetIdProperty(obj);
+            string idProperty = dbSetReflection.GetIdProperty(obj);
 
             if (string.IsNullOrEmpty(idProperty))
                 throw new NullReferenceException(nameof(idProperty));
@@ -501,8 +279,8 @@ namespace MyOwnORM
             {
                 connection.Open();
 
-                string updateStr = MapEntityPropertyValuesInUpdateString(obj);
-                string idPropertyValue = GetIdPropertyValue(obj);
+                string updateStr = dbSetReflection.MapEntityPropertyValuesInUpdateString(obj);
+                string idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
 
                 query = $"UPDATE {tableName} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
 
@@ -512,8 +290,8 @@ namespace MyOwnORM
         }
         public void UpdateCascade(T obj)
         {
-            string idProperty = GetIdProperty(obj);
-            string[] names = GetNamesOfCollectionOrModel();
+            string idProperty = dbSetReflection.GetIdProperty(obj);
+            string[] names = dbSetReflection.GetNamesOfCollectionOrModel();
 
             if (string.IsNullOrEmpty(idProperty))
                 throw new NullReferenceException(nameof(idProperty));
@@ -522,15 +300,15 @@ namespace MyOwnORM
             {
                 connection.Open();
 
-                string updateStr = MapEntityPropertyValuesInUpdateString(obj, idProperty);
-                string idPropertyValue = GetIdPropertyValue(obj);
+                string updateStr = dbSetReflection.MapEntityPropertyValuesInUpdateString(obj, idProperty);
+                string idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
 
                 string query = $"UPDATE {typeof(T).Name} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
 
                 SqlCommand command = new SqlCommand(query, connection);
                 command.ExecuteNonQuery();
 
-                string[] queries = UpdateCascadeModelsOrCollection(obj, names, idProperty, idPropertyValue);
+                string[] queries = dbSetReflection.UpdateCascadeModelsOrCollection(obj, names, idProperty, idPropertyValue);
 
                 for (int i = 0; i < queries.Length; i++)
                 {
@@ -545,8 +323,8 @@ namespace MyOwnORM
             {
                 connection.Open();
 
-                string key = GetKeyInLambdaExpression(predicate);
-                dynamic val = GetValueInLambdaExpression(predicate);
+                string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
+                dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
 
                 query = $"DELETE FROM {tableName} WHERE {key}={val}";
 
@@ -560,8 +338,8 @@ namespace MyOwnORM
             {
                 connection.Open();
 
-                string key = GetKeyInLambdaExpression(predicate);
-                dynamic val = GetValueInLambdaExpression(predicate);
+                string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
+                dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
                 List<string> tables = dbSetExtension.FindTablesNameWithForeignKeysForCascadeDelete(typeof(T).Name);
                 List<string> fks = dbSetExtension.FindForeignKeysNameInTablesForCascadeDelete(typeof(T).Name);
 
@@ -580,13 +358,13 @@ namespace MyOwnORM
         }
         public dynamic FromSqlRaw(string sql)
         {
-            string keyWord = query.Split()[0] + query.Split()[1];
+            string keyWord = sql.Split()[0] + sql.Split()[1];
             List<T> entities = new List<T>();
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
-                using (SqlCommand command = new SqlCommand(query, connection))
+                using (SqlCommand command = new SqlCommand(sql, connection))
                 {
                     if (keyWord.ToLower() == "select*")
                     {
@@ -594,7 +372,7 @@ namespace MyOwnORM
                         {
                             while (reader.Read())
                             {
-                                T entity = MapReaderToEntity(reader);
+                                T entity = dbSetReflection.MapReaderToEntity(reader);
                                 entities.Add(entity);
                             }
                         }
@@ -613,6 +391,128 @@ namespace MyOwnORM
                 }
             }
             return null;
+        }
+        private void FindSetMethod(PropertyInfo property, string idValue, T entity, string propVal, dynamic includeType)
+        {
+            if (property.PropertyType.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)) && property.Name == propVal)
+            {
+                SetGenericEntity(property, idValue, entity);
+            }
+            else if (includeType.GetType().IsAssignableFrom(property.PropertyType) && propVal == includeType.GetType().Name && property.Name == includeType.GetType().Name)
+            {
+                SetClassEntity(includeType, idValue, property, entity);
+            }
+        }
+        private void SetGenericEntity(PropertyInfo property, string idValue, T entity)
+        {
+            Type elementType = dbSetReflection.GetTypeCollectionArguments(property);
+            IList entitiesSecond = dbSetReflection.GetIListType(property);
+            string fkChoose = dbSetExtension.GetForeignKeyNameForGenericType();
+
+            using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
+            {
+                connectionSecond.Open();
+
+                query = $"SELECT * FROM {property.Name} WHERE {fkChoose} = @Id";
+
+                using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
+                {
+                    commandSecond.Parameters.AddWithValue("@Id", idValue);
+
+                    using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
+                    {
+                        while (readerSecond.Read())
+                        {
+                            object entitySecond = dbSetReflection.MapToEntityIncludeMethodGenericType(readerSecond, elementType);
+                            entitiesSecond.Add(entitySecond);
+                        }
+                        property.SetValue(entity, entitiesSecond);
+                    }
+                }
+            }
+        }
+        private void SetClassEntity(dynamic includeType, string idValue, PropertyInfo property, T entity)
+        {
+            string fkChoose = dbSetExtension.GetForeignKeyNameForCustomClass(includeType);
+            using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
+            {
+                connectionSecond.Open();
+
+                string query = $"SELECT * FROM {includeType.GetType().Name} WHERE {fkChoose} = @Id";
+
+                using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
+                {
+                    commandSecond.Parameters.AddWithValue("@Id", idValue);
+
+                    using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
+                    {
+                        while (readerSecond.Read())
+                        {
+                            object entitySecond = dbSetReflection.MapToEntityIncludeMethodCustomClass(includeType, readerSecond);
+                            property.SetValue(entity, entitySecond);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void SetGenericEntityIncludeExpressionsMethod(PropertyInfo propertyInfo, dynamic includeType, T entity, string idValue, SqlDataReader reader)
+        {
+            Type elementType = dbSetReflection.GetTypeCollectionArguments(propertyInfo);
+            IList entitiesSecond = dbSetReflection.GetIListType(propertyInfo);
+
+            string fkChoose = dbSetExtension.GetForeignKeyNameForIncludeExpressionsMethod(includeType, entity);
+
+            using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
+            {
+                connectionSecond.Open();
+
+                string query = $"SELECT * FROM {propertyInfo.Name} WHERE {fkChoose} = @Id";
+
+                using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
+                {
+                    commandSecond.Parameters.AddWithValue("@Id", idValue);
+
+                    using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
+                    {
+                        while (readerSecond.Read())
+                        {
+                            object entitySecond = dbSetReflection.MapToGenericEntityForIncludeExpressionsMethod(reader, elementType);
+
+                            entitiesSecond.Add(entitySecond);
+                        }
+                    }
+                }
+            }
+
+            propertyInfo.SetValue(entity, entitiesSecond);
+        }
+
+        public void SetEntityIncludeExpressionsMethod(dynamic includeType, T entity, PropertyInfo propertyInfo, string idValue, SqlDataReader reader, Type propertyType)
+        {
+            string fkChoose = dbSetExtension.GetForeignKeyNameForIncludeExpressionsMethod(includeType, entity);
+
+            using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
+            {
+                connectionSecond.Open();
+
+                string query = $"SELECT * FROM {propertyInfo.Name} WHERE {fkChoose} = @Id";
+
+                using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
+                {
+                    commandSecond.Parameters.AddWithValue("@Id", idValue);
+
+                    using (SqlDataReader readerSecond = commandSecond.ExecuteReader())
+                    {
+                        while (readerSecond.Read())
+                        {
+                            object entitySecond = dbSetReflection.MapToEntityForIncludeExpressionsMethod(propertyType, reader);
+
+                            propertyInfo.SetValue(entity, entitySecond);
+                        }
+                    }
+                }
+            }
         }
     }
 }

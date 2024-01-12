@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 namespace MyOwnORM
 {
     [AttributeUsage(AttributeTargets.Property)]
-    public sealed class CustomKeyAttribute : Attribute
+    public sealed class CustomPrimaryKeyAttribute : Attribute
     {
         public string Id { get; }
-        public CustomKeyAttribute() { }
-        public CustomKeyAttribute(string id) => Id = id;
+        public CustomPrimaryKeyAttribute() { }
+        public CustomPrimaryKeyAttribute(string id) => Id = id;
     }
 }

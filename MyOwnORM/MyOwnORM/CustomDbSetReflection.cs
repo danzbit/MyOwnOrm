@@ -1,5 +1,6 @@
 ﻿using Microsoft.CSharp.RuntimeBinder;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.SqlClient;
@@ -14,7 +15,8 @@ namespace MyOwnORM
 {
     public class CustomDbSetReflection<T> where T : class
     {
-        private protected static T MapReaderToEntity(SqlDataReader reader)
+        private CustomDbSetService<T> dbSetService;
+        public T MapReaderToEntity(SqlDataReader reader)
         {
             T entity = Activator.CreateInstance<T>();
 
@@ -30,7 +32,7 @@ namespace MyOwnORM
             return entity;
         }
 
-        private protected static string MapEntityPropertyValuesInString(T obj)
+        public string MapEntityPropertyValuesInString(T obj)
         {
             Type type = obj.GetType();
 
@@ -53,7 +55,7 @@ namespace MyOwnORM
             return strBuilder.ToString();
         }
 
-        private protected static string MapEntityPropertyValuesInUpdateString(T obj)
+        public string MapEntityPropertyValuesInUpdateString(T obj)
         {
             Type type = obj.GetType();
 
@@ -75,23 +77,23 @@ namespace MyOwnORM
             }
 
             return strBuilder.ToString();
-        } 
+        }
 
-        private protected static string GetIdProperty(T obj)
+        public string GetIdProperty(T obj)
         {
             Type type = obj.GetType();
-                for (int i = 0; i < type.GetProperties().Length; i++)
-                {
-                    PropertyInfo prop = type.GetProperties()[i];
-                    if (prop.Name == "Id")
-                        return prop.Name;
-                    else if (Attribute.IsDefined(prop, typeof(CustomKeyAttribute)))
-                        return prop.Name;
-                }
-                return string.Empty;
+            for (int i = 0; i < type.GetProperties().Length; i++)
+            {
+                PropertyInfo prop = type.GetProperties()[i];
+                if (prop.Name == "Id")
+                    return prop.Name;
+                else if (Attribute.IsDefined(prop, typeof(CustomPrimaryKeyAttribute)))
+                    return prop.Name;
             }
+            return string.Empty;
+        }
 
-        private protected static string GetIdPropertyValue(T obj)
+        public string GetIdPropertyValue(T obj)
         {
             Type type = typeof(T);
             for (int i = 0; i < type.GetProperties().Length; i++)
@@ -99,31 +101,13 @@ namespace MyOwnORM
                 PropertyInfo prop = type.GetProperties()[i];
                 if (prop.Name == "Id")
                     return prop.GetValue(obj).ToString();
-                else if (Attribute.IsDefined(prop, typeof(CustomKeyAttribute)))
+                else if (Attribute.IsDefined(prop, typeof(CustomPrimaryKeyAttribute)))
                     return prop.GetValue(obj).ToString();
             }
             return string.Empty;
         }
 
-        private protected static string GetKeyInLambdaExpression(Expression<Func<T, bool>> propertyLambda)
-        {
-            var binaryExpression = propertyLambda.Body as BinaryExpression;
-            var memberExpression = binaryExpression.Left as MemberExpression;
-            var propertyInfo = memberExpression.Member as PropertyInfo;
-            return propertyInfo.Name;
-        }
-        private protected static dynamic GetValueInLambdaExpression(Expression<Func<T, bool>> propertyLambda)
-        {
-            var binaryExpression = propertyLambda.Body as BinaryExpression;
-            var memberExpression = binaryExpression.Right.ToString();
-            if (memberExpression.StartsWith("\"") && memberExpression.EndsWith("\""))
-            {
-                return memberExpression.Substring(1, memberExpression.Length - 2);
-            }
-            return memberExpression;
-        }
-
-        private protected static string GetForeignKeyAttribute(dynamic obj)
+        public string GetForeignKeyAttribute(dynamic obj)
         {
             T targetType = Activator.CreateInstance<T>();
             PropertyInfo[] properties = obj.GetType().GetProperties();
@@ -143,12 +127,12 @@ namespace MyOwnORM
             return string.Empty;
         }
 
-        private protected static bool IsCollectionType(PropertyInfo property)
+        public bool IsCollectionType(PropertyInfo property)
         {
             return property.PropertyType.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
         }
 
-        private protected static List<string> GetPropertyValues(Expression<Func<T, object>>[] expressions)
+        public List<string> GetPropertyValues(Expression<Func<T, object>>[] expressions)
         {
             List<string> result = new List<string>();
             foreach (var expression in expressions)
@@ -170,7 +154,7 @@ namespace MyOwnORM
             return result;
         }
 
-        private protected static dynamic[] GetIncludeTypes(Expression<Func<T, object>>[] includes)
+        public dynamic[] GetIncludeTypes(Expression<Func<T, object>>[] includes)
         {
             List<dynamic> result = new List<dynamic>();
 
@@ -216,22 +200,9 @@ namespace MyOwnORM
             return result.ToArray();
         }
 
-        private protected static string GetPropertyValue(Expression<Func<T, object>> expression)
+        public dynamic GetIncludeType(Expression<Func<T, object>> include)
         {
-            if (expression.Body is MemberExpression memberExpression)
-            {
-                return memberExpression.Member.Name;
-            }
-            else if (expression.Body is UnaryExpression unaryExpression && unaryExpression.Operand is MemberExpression operand)
-            {
-                return operand.Member.Name;
-            }
-            return string.Empty;
-        }
-
-        private protected static dynamic GetIncludeType(Expression<Func<T, object>> include)
-        {
-            string propVal = GetPropertyValue(include);
+            string propVal = dbSetService.GetPropertyValue(include);
 
             PropertyInfo[] includeProperties = typeof(T).GetProperties();
 
@@ -270,7 +241,7 @@ namespace MyOwnORM
             return null;
         }
 
-        private protected static string[] GetNamesOfCollectionOrModel()
+        public string[] GetNamesOfCollectionOrModel()
         {
             List<string> res = new List<string>();
             T obj = Activator.CreateInstance<T>();
@@ -294,7 +265,7 @@ namespace MyOwnORM
             return res.ToArray();
         }
 
-        private protected static dynamic GetIncludeTypeAndSetValues(T obj, string propVal)
+        public dynamic GetIncludeTypeAndSetValues(T obj, string propVal)
         {
             PropertyInfo[] properties = typeof(T).GetProperties();
 
@@ -350,7 +321,7 @@ namespace MyOwnORM
             return null;
         }
 
-        private protected static string[] UpdateCascadeModelsOrCollection(T obj, string[] names, string idProperty, string idPropertyValue)
+        public string[] UpdateCascadeModelsOrCollection(T obj, string[] names, string idProperty, string idPropertyValue)
         {
             List<string> queries = new List<string>();
 
@@ -366,13 +337,15 @@ namespace MyOwnORM
                         if (properyType.IsGenericType)
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string[] queryIes = MapListEntitiesPropertyValuesInUpdateString(entity, property.Name, idProperty, idPropertyValue);
+                            string[] strs = MapListEntitiesPropertyValuesInUpdateString(entity, idProperty);
+                            string[] queryIes = dbSetService.GenerateUpdateSqlQueries(strs, property.Name, idProperty, idPropertyValue);
                             queries.AddRange(queryIes);
                         }
                         else if (properyType.IsClass && properyType != typeof(string))
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string query = MapEntityPropertyValuesInUpdateString(entity, property.Name, idProperty, idPropertyValue);
+                            string str = MapEntityPropertyValuesInUpdateString(entity, idProperty);
+                            string query = dbSetService.GenerateUpdateSqlQuery(str, property.Name, idProperty, idPropertyValue);
                             queries.Add(query);
                         }
                     }
@@ -382,7 +355,7 @@ namespace MyOwnORM
             return queries.ToArray();
         }
 
-        private protected static string MapEntityPropertyValuesInString(dynamic obj, string tableName)
+        public string MapEntityPropertyValuesInString(dynamic obj)
         {
             Type type = obj.GetType();
 
@@ -410,10 +383,10 @@ namespace MyOwnORM
                 }
             }
 
-            return $"INSERT INTO {tableName} VALUES ({strBuilder.ToString()})";
+            return strBuilder.ToString();
         }
 
-        private protected static string[] InsertCascadeModelsOrCollection(T obj, string[] names)
+        public string[] InsertCascadeModelsOrCollection(T obj, string[] names)
         {
             List<string> queries = new List<string>();
 
@@ -429,13 +402,15 @@ namespace MyOwnORM
                         if (properyType.IsGenericType)
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string[] queryIes = MapListEntitiesPropertyValuesInString(entity, property.Name);
-                            queries.AddRange(queryIes);
+                            string[] strs = MapListEntitiesPropertyValuesInString(entity, property.Name);
+                            string[] querIes = dbSetService.GenerateInsertSqlQueries(strs, property.Name);
+                            queries.AddRange(querIes);
                         }
                         else if (properyType.IsClass && properyType != typeof(string))
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string query = MapEntityPropertyValuesInString(entity, property.Name);
+                            string str = MapEntityPropertyValuesInString(entity);
+                            string query = dbSetService.GenerateInsertSqlQuery(str, property.Name);
                             queries.Add(query);
                         }
                     }
@@ -445,7 +420,7 @@ namespace MyOwnORM
             return queries.ToArray();
         }
 
-        private protected static string MapEntityPropertyValuesInString(T obj, string[] names)
+        public string MapEntityPropertyValuesInString(T obj, string[] names)
         {
             Type type = obj.GetType();
 
@@ -494,7 +469,7 @@ namespace MyOwnORM
             return strBuilder.ToString();
         }
 
-        private protected static string[] MapListEntitiesPropertyValuesInString(dynamic obj, string tableName)
+        public string[] MapListEntitiesPropertyValuesInString(dynamic obj, string tableName)
         {
             List<string> strs = new List<string>();
             Type elementType = obj.GetType().GetGenericArguments()[0];
@@ -529,7 +504,7 @@ namespace MyOwnORM
                         }
                         propertyInstanceProperties[i].SetValue(elementInstance, value);
                     }
-                    catch (RuntimeBinderException ex)
+                    catch (RuntimeBinderException)
                     {
                         continue;
                     }
@@ -543,14 +518,10 @@ namespace MyOwnORM
                 strs.Add(strBuilder.ToString());
             }
 
-            List<string> res = new List<string>();
-            foreach (var str in strs)
-                res.Add($"INSERT INTO {tableName} VALUES ({str})");
-
-            return res.ToArray();
+            return strs.ToArray();
         }
 
-        private protected static string MapEntityPropertyValuesInUpdateString(T obj, string idProperty)
+        public string MapEntityPropertyValuesInUpdateString(T obj, string idProperty)
         {
             Type type = obj.GetType();
 
@@ -590,7 +561,7 @@ namespace MyOwnORM
             return strBuilder.ToString();
         }
 
-        private protected static string MapEntityPropertyValuesInUpdateString(dynamic obj, string tableName, string idProperty, string idPropertyValue)
+        public string MapEntityPropertyValuesInUpdateString(dynamic obj, string idProperty)
         {
             Type type = obj.GetType();
 
@@ -626,10 +597,10 @@ namespace MyOwnORM
                 strBuilder.Length = strBuilder.Length - 2;
             }
 
-            return $"UPDATE {tableName} SET {strBuilder} WHERE {idProperty}={idPropertyValue}";
+            return strBuilder.ToString();
         }
 
-        private protected static string[] MapListEntitiesPropertyValuesInUpdateString(dynamic obj, string tableName, string idProperty, string idPropertyValue)
+        public string[] MapListEntitiesPropertyValuesInUpdateString(dynamic obj, string idProperty)
         {
             List<string> strs = new List<string>();
             Type elementType = obj.GetType().GetGenericArguments()[0];
@@ -683,11 +654,170 @@ namespace MyOwnORM
                 strs.Add(strBuilder.ToString());
             }
 
-            List<string> res = new List<string>();
-            foreach (var str in strs)
-                res.Add($"UPDATE {tableName} SET {str} WHERE {idProperty}={idPropertyValue}");
+            return strs.ToArray();
+        }
 
-            return res.ToArray();
+        public Type GetTypeCollectionArguments(PropertyInfo property)
+        {
+            return property.PropertyType.GetGenericArguments()[0];
+        }
+
+        public IList GetIListType(PropertyInfo property)
+        {
+            Type elementType = GetTypeCollectionArguments(property);
+            Type listType = typeof(List<>).MakeGenericType(elementType);
+            IList entitiesSecond = (IList)Activator.CreateInstance(listType);
+
+            return entitiesSecond;
+        }
+
+        public T CreateInstanceType()
+        {
+            return Activator.CreateInstance<T>();
+        }
+        public object MapToEntityIncludeMethodGenericType(SqlDataReader reader, Type elementType)
+        {
+            object entitySecond = Activator.CreateInstance(elementType);
+
+            PropertyInfo[] properties = elementType.GetProperties();
+
+            foreach (PropertyInfo propertySecond in properties)
+            {
+                string propertyNameSecond = propertySecond.Name;
+
+
+                int ordinalSecond;
+
+                try
+                {
+                    ordinalSecond = reader.GetOrdinal(propertyNameSecond);
+                }
+                catch (IndexOutOfRangeException e)
+                {
+                    continue;
+                }
+
+                object valueSecond = reader.GetValue(ordinalSecond);
+
+                propertySecond.SetValue(entitySecond, valueSecond);
+            }
+
+            return entitySecond;
+        }
+
+        public object MapToEntityIncludeMethodCustomClass(dynamic includeType, SqlDataReader reader)
+        {
+            object entitySecond = Activator.CreateInstance(includeType.GetType());
+
+            PropertyInfo[] properties = includeType.GetType().GetProperties();
+
+            foreach (PropertyInfo propertySecond in properties)
+            {
+                string propertyNameSecond = propertySecond.Name;
+
+
+                int ordinalSecond;
+
+                try
+                {
+                    ordinalSecond = reader.GetOrdinal(propertyNameSecond);
+                }
+                catch (IndexOutOfRangeException e)
+                {
+                    continue;
+                }
+
+                object valueSecond = reader.GetValue(ordinalSecond);
+
+                propertySecond.SetValue(entitySecond, valueSecond);
+            }
+
+            return entitySecond;
+        }
+
+        public void SetPropertiesForIncludeExpressionsMethod(SqlDataReader reader, string idValue, T entity)
+        {
+            foreach (var property in typeof(T).GetProperties())
+            {
+                string propertyName = property.Name;
+
+                int ordinal;
+                try
+                {
+                    ordinal = reader.GetOrdinal(propertyName);
+                }
+                catch (IndexOutOfRangeException)
+                {
+                    continue;
+                }
+
+                object value = reader.GetValue(ordinal);
+
+                if (propertyName == "Id")
+                    idValue = value.ToString();
+
+                property.SetValue(entity, value);
+            }
+        }
+
+        public object MapToGenericEntityForIncludeExpressionsMethod(SqlDataReader reader, Type elementType)
+        {
+            object entitySecond = Activator.CreateInstance(elementType);
+
+            PropertyInfo[] properties = elementType.GetProperties();
+
+            foreach (PropertyInfo propertySecond in properties)
+            {
+                string propertyNameSecond = propertySecond.Name;
+
+                int ordinalSecond;
+
+                try
+                {
+                    ordinalSecond = reader.GetOrdinal(propertyNameSecond);
+                }
+                catch (IndexOutOfRangeException)
+                {
+                    continue;
+                }
+
+                object valueSecond = reader.GetValue(ordinalSecond);
+                propertySecond.SetValue(entitySecond, valueSecond);
+            }
+
+            return entitySecond;
+        }
+
+        public object MapToEntityForIncludeExpressionsMethod(Type propertyType, SqlDataReader reader)
+        {
+            object entitySecond = Activator.CreateInstance(propertyType);
+
+            PropertyInfo[] properties = propertyType.GetProperties();
+
+            foreach (PropertyInfo propertySecond in properties)
+            {
+                string propertyNameSecond = propertySecond.Name;
+
+                int ordinalSecond;
+
+                try
+                {
+                    ordinalSecond = reader.GetOrdinal(propertyNameSecond);
+                }
+                catch (IndexOutOfRangeException)
+                {
+                    continue;
+                }
+
+                object valueSecond = reader.GetValue(ordinalSecond);
+                propertySecond.SetValue(entitySecond, valueSecond);
+            }
+            return entitySecond;
+        }
+
+        public PropertyInfo GetPropertyInfo (string propVal)
+        {
+            return typeof(T).GetProperty(propVal);
         }
     }
 }

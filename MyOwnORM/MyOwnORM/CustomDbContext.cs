@@ -9,7 +9,7 @@ namespace MyOwnORM
 {
     public class CustomDbContext : IDisposable
     {
-        public readonly string _connectionString = string.Empty;
+        private readonly string _connectionString = string.Empty;
         private bool disposed = false;
         public CustomDbContext()
         {
@@ -43,8 +43,8 @@ namespace MyOwnORM
         public void Dispose()
         {
             
-            Dispose(true);
-            // подавляем финализацию
+            Dispose(true); 
+
             GC.SuppressFinalize(this);
         }
 
@@ -53,9 +53,8 @@ namespace MyOwnORM
             if (disposed) return;
             if (disposing)
             {
-                // Освобождаем управляемые ресурсы
+
             }
-            // освобождаем неуправляемые объекты
             disposed = true;
         }
         ~CustomDbContext()

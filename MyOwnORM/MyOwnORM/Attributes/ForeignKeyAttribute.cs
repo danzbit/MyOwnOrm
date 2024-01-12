@@ -7,11 +7,11 @@ using System.Threading.Tasks;
 namespace MyOwnORM
 {
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
-    public class CascadeDeleteAttribute : Attribute
+    public sealed class ForeignKeyAttribute : Attribute
     {
         public Type TargetType { get; }
 
-        public CascadeDeleteAttribute(Type targetType)
+        public ForeignKeyAttribute(Type targetType)
         {
             TargetType = targetType;
         }

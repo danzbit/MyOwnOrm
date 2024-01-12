@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace MyOwnORM
 {
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
-    public class StringLengthAttribute : ValidationAttribute
+    public sealed class StringLengthAttribute : ValidationAttribute
     {
         readonly int _length;
         public StringLengthAttribute(int length)

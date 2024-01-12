@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 
 namespace MyOwnORM
 {
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-    public class TableAttribute : Attribute
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false)]
+    public sealed class TableAttribute : Attribute
     {
         public string Name { get; }
         public TableAttribute() { }
