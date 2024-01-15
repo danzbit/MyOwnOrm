@@ -9,7 +9,7 @@ namespace MyOwnORM
 {
     public class CustomDbContextOptionsBuilder 
     {
-        public static void UseSqlServer(string connectionString)
+        public static void TestConnection(string connectionString)
         {
             using (SqlConnection connection = new SqlConnection(connectionString))
             {

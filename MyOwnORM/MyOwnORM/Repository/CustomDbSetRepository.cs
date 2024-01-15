@@ -1,4 +1,6 @@
-﻿using System;
+﻿using MyOwnORM.Reflection;
+using MyOwnORM.Repository;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -25,21 +27,21 @@ namespace MyOwnORM
             dbSetExtension = new CustomDbSetService<T>(_connectionString);
             dbSetReflection = new CustomDbSetReflection<T>();
         }
-        public IEnumerable<T> GetAll()
+        public async Task<IEnumerable<T>> GetAllAsync()
         {
             List<T> entities = new List<T>();
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 query = $"SELECT * FROM {tableName}";
 
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    using (SqlDataReader reader = command.ExecuteReader())
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
                     {
-                        while (reader.Read())
+                        while (await reader.ReadAsync())
                         {
                             T entity = dbSetReflection.MapReaderToEntity(reader);
                             entities.Add(entity);
@@ -51,7 +53,7 @@ namespace MyOwnORM
             return entities.AsQueryable();
         }
 
-        public IEnumerable<T> Include(Expression<Func<T, object>> include)
+        public async Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>> include)
         {
             List<T> entities = new List<T>();
 
@@ -60,16 +62,16 @@ namespace MyOwnORM
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string tableName = typeof(T).Name;
                 string sql = $"SELECT * FROM {tableName}";
                 SqlCommand command = new SqlCommand(sql, connection);
                 string idValue = string.Empty;
 
-                using (SqlDataReader reader = command.ExecuteReader())
+                using (SqlDataReader reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                     {
                         T entity = dbSetReflection.CreateInstanceType();
 
@@ -102,22 +104,22 @@ namespace MyOwnORM
             return entities;
         }
 
-        public IEnumerable<T> Include(Expression<Func<T, object>>[] includes)
+        public async Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>>[] includes)
         {
             List<T> entities = new List<T>();
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string tableName = typeof(T).Name;
                 string sql = $"SELECT * FROM {tableName}";
                 SqlCommand command = new SqlCommand(sql, connection);
                 string idValue = string.Empty;
 
-                using (SqlDataReader reader = command.ExecuteReader())
+                using (SqlDataReader reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                     {
                         T entity = dbSetReflection.CreateInstanceType();
 
@@ -151,12 +153,12 @@ namespace MyOwnORM
             return entities;
         }
 
-        public IQueryable<T> Where(Expression<Func<T, bool>> predicate)
+        public async Task<IQueryable<T>> WhereAsync(Expression<Func<T, bool>> predicate)
         {
             List<T> entities = new List<T>();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
                 dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
@@ -164,9 +166,9 @@ namespace MyOwnORM
                 query = $"SELECT * FROM {tableName} WHERE {key} = {val}";
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    using (SqlDataReader reader = command.ExecuteReader())
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
                     {
-                        while (reader.Read())
+                        while (await reader.ReadAsync())
                         {
                             T entity = dbSetReflection.MapReaderToEntity(reader);
                             entities.Add(entity);
@@ -178,7 +180,7 @@ namespace MyOwnORM
             return entities.AsQueryable();
         }
 
-        public T GetById(dynamic id)
+        public async Task<T> GetByIdAsync(dynamic id)
         {
             T entity = Activator.CreateInstance<T>();
             string idProperty = dbSetReflection.GetIdProperty(entity);
@@ -188,14 +190,14 @@ namespace MyOwnORM
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 query = $"SELECT * FROM {tableName} WHERE {idProperty} = {id}";
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    using (SqlDataReader reader = command.ExecuteReader())
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
                     {
-                        if (reader.Read())
+                        if (await reader.ReadAsync())
                         {
                             T type = dbSetReflection.MapReaderToEntity(reader);
                             entity = type;
@@ -206,27 +208,27 @@ namespace MyOwnORM
             return entity;
         }
 
-        public void Insert(T obj)
+        public async Task InsertAsync(T obj)
         {
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string values = dbSetReflection.MapEntityPropertyValuesInString(obj);
 
                 query = $"INSERT INTO {tableName} VALUE ({values})";
 
                 SqlCommand command = new SqlCommand(query, connection);
-                command.ExecuteNonQuery();
+                await command.ExecuteNonQueryAsync();
             }
         }
-        public void InsertCascade(T obj)
+        public async Task InsertCascadeAsync(T obj)
         {
             string[] names = dbSetReflection.GetNamesOfCollectionOrModel();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
                 bool hasRowInDataBase = false;
-                connection.Open();
+                await connection.OpenAsync();
 
                 string values = dbSetReflection.MapEntityPropertyValuesInString(obj, names);
                 string idNameEntity = dbSetReflection.GetIdProperty(obj);
@@ -236,9 +238,9 @@ namespace MyOwnORM
 
                 using (SqlCommand commandCheck = new SqlCommand(checkQuery, connection))
                 {
-                    using (SqlDataReader reader = commandCheck.ExecuteReader())
+                    using (SqlDataReader reader = await commandCheck.ExecuteReaderAsync())
                     {
-                        while (reader.Read())
+                        while (await reader.ReadAsync())
                         {
                             object id = reader[$"{idNameEntity}"];
                             if (id == null)
@@ -255,7 +257,7 @@ namespace MyOwnORM
                     string query = $"INSERT INTO {typeof(T).Name} VALUES ({values})";
 
                     SqlCommand command = new SqlCommand(query, connection);
-                    command.ExecuteNonQuery();
+                    await command.ExecuteNonQueryAsync();
                 }
 
                 string[] queries = dbSetReflection.InsertCascadeModelsOrCollection(obj, names);
@@ -263,12 +265,12 @@ namespace MyOwnORM
                 for (int i = 0; i < queries.Length; i++)
                 {
                     SqlCommand commandCascade = new SqlCommand(queries[i], connection);
-                    commandCascade.ExecuteNonQuery();
+                    await commandCascade.ExecuteNonQueryAsync();
                 }
 
             }
         }
-        public void Update(T obj)
+        public async Task UpdateAsync(T obj)
         {
             string idProperty = dbSetReflection.GetIdProperty(obj);
 
@@ -277,7 +279,7 @@ namespace MyOwnORM
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string updateStr = dbSetReflection.MapEntityPropertyValuesInUpdateString(obj);
                 string idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
@@ -285,10 +287,10 @@ namespace MyOwnORM
                 query = $"UPDATE {tableName} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
 
                 SqlCommand command = new SqlCommand(query, connection);
-                command.ExecuteNonQuery();
+                await command.ExecuteNonQueryAsync();
             }
         }
-        public void UpdateCascade(T obj)
+        public async Task UpdateCascadeAsync(T obj)
         {
             string idProperty = dbSetReflection.GetIdProperty(obj);
             string[] names = dbSetReflection.GetNamesOfCollectionOrModel();
@@ -298,7 +300,7 @@ namespace MyOwnORM
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string updateStr = dbSetReflection.MapEntityPropertyValuesInUpdateString(obj, idProperty);
                 string idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
@@ -306,22 +308,22 @@ namespace MyOwnORM
                 string query = $"UPDATE {typeof(T).Name} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
 
                 SqlCommand command = new SqlCommand(query, connection);
-                command.ExecuteNonQuery();
+                await command.ExecuteNonQueryAsync();
 
                 string[] queries = dbSetReflection.UpdateCascadeModelsOrCollection(obj, names, idProperty, idPropertyValue);
 
                 for (int i = 0; i < queries.Length; i++)
                 {
                     SqlCommand commandCascade = new SqlCommand(queries[i], connection);
-                    commandCascade.ExecuteNonQuery();
+                    await commandCascade.ExecuteNonQueryAsync();
                 }
             }
         }
-        public void Delete(Expression<Func<T, bool>> predicate)
+        public async Task DeleteAsync(Expression<Func<T, bool>> predicate)
         {
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
                 dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
@@ -329,14 +331,14 @@ namespace MyOwnORM
                 query = $"DELETE FROM {tableName} WHERE {key}={val}";
 
                 SqlCommand command = new SqlCommand(query, connection);
-                command.ExecuteNonQuery();
+                await command.ExecuteNonQueryAsync();
             }
         }
-        public void DeleteCascade(Expression<Func<T, bool>> predicate)
+        public async Task DeleteCascadeAsync(Expression<Func<T, bool>> predicate)
         {
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
                 dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
@@ -347,30 +349,30 @@ namespace MyOwnORM
                 {
                     string cascadeDeleteQuery = $"DELETE FROM {tables[i]} WHERE {fks[i]} = {val}";
                     SqlCommand commandCascadeDelete = new SqlCommand(cascadeDeleteQuery, connection);
-                    commandCascadeDelete.ExecuteNonQuery();
+                    await commandCascadeDelete.ExecuteNonQueryAsync();
                 }
 
                 string query = $"DELETE FROM {typeof(T).Name} WHERE {key}={val}";
 
                 SqlCommand command = new SqlCommand(query, connection);
-                command.ExecuteNonQuery();
+                await command.ExecuteNonQueryAsync();
             }
         }
-        public dynamic FromSqlRaw(string sql)
+        public async Task<dynamic> FromSqlRawAsync(string sql)
         {
             string keyWord = sql.Split()[0] + sql.Split()[1];
             List<T> entities = new List<T>();
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
                 using (SqlCommand command = new SqlCommand(sql, connection))
                 {
                     if (keyWord.ToLower() == "select*")
                     {
-                        using (SqlDataReader reader = command.ExecuteReader())
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
                         {
-                            while (reader.Read())
+                            while (await reader.ReadAsync())
                             {
                                 T entity = dbSetReflection.MapReaderToEntity(reader);
                                 entities.Add(entity);
@@ -381,11 +383,11 @@ namespace MyOwnORM
                     }
                     else if (keyWord.ToLower() == "update" || keyWord.ToLower() == "insert" || keyWord.ToLower() == "delete")
                     {
-                        command.ExecuteNonQuery();
+                        await command.ExecuteNonQueryAsync();
                     }
                     else
                     {
-                        object scalar = command.ExecuteScalar();
+                        object scalar = await command.ExecuteScalarAsync();
                         return scalar;
                     }
                 }

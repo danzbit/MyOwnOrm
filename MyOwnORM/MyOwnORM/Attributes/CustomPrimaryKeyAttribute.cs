@@ -4,10 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MyOwnORM
+namespace MyOwnORM.Attributes
 {
-    [AttributeUsage(AttributeTargets.Property)]
-    public sealed class CustomPrimaryKeyAttribute : Attribute
+    public class CustomPrimaryKeyAttribute : Attribute
     {
         public string Id { get; }
         public CustomPrimaryKeyAttribute() { }

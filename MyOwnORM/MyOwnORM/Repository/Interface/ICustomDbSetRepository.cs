@@ -9,17 +9,18 @@ namespace MyOwnORM.Repository
 {
     public interface ICustomDbSetRepository<T> where T : class
     {
-        public IEnumerable<T> GetAll();
-        public IEnumerable<T> Include(Expression<Func<T, object>> include);
-        public IEnumerable<T> Include(Expression<Func<T, object>>[] includes);
-        public IQueryable<T> Where(Expression<Func<T, bool>> predicate);
-        public T GetById(dynamic id);
-        public void Insert(T obj);
-        public void InsertCascade(T obj);
-        public void Update(T obj);
-        public void UpdateCascade(T obj);
-        public void Delete(Expression<Func<T, bool>> predicate);
-        public void DeleteCascade(Expression<Func<T, bool>> predicate);
-        public dynamic FromSqlRaw(string sql);
+        public Task<IEnumerable<T>> GetAllAsync();
+        public Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>> include);
+        public Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>>[] includes);
+        public Task<IQueryable<T>> WhereAsync(Expression<Func<T, bool>> predicate);
+        public Task<T> GetByIdAsync(dynamic id);
+        public Task InsertAsync(T obj);
+        public Task InsertCascadeAsync(T obj);
+        public Task UpdateAsync(T obj);
+        public Task UpdateCascadeAsync(T obj);
+        public Task DeleteAsync(Expression<Func<T, bool>> predicate);
+        public Task DeleteCascadeAsync(Expression<Func<T, bool>> predicate);
+        public Task<dynamic> FromSqlRawAsync(string sql);
+
     }
 }
