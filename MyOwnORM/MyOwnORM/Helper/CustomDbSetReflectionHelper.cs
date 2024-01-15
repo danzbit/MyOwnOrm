@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MyOwnORM.Reflection.Helpers
+namespace MyOwnORM.Helper
 {
     public class CustomDbSetReflectionHelper<T> where T : class
     {

@@ -1,5 +1,5 @@
-﻿using MyOwnORM.Reflection;
-using MyOwnORM.Repository;
+﻿using MyOwnORM.Interface;
+using MyOwnORM.Reflection;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -11,7 +11,7 @@ using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MyOwnORM
+namespace MyOwnORM.Implementations
 {
     public class CustomDbSetRepository<T> : ICustomDbSetRepository<T> where T : class
     {
@@ -20,7 +20,7 @@ namespace MyOwnORM
         private string query;
         private CustomDbSetService<T> dbSetExtension;
         private CustomDbSetReflection<T> dbSetReflection;
-        public CustomDbSetRepository(string connectionString) 
+        public CustomDbSetRepository(string connectionString)
         {
             _connectionString = connectionString;
             tableName = typeof(T).Name;
@@ -185,7 +185,7 @@ namespace MyOwnORM
             T entity = Activator.CreateInstance<T>();
             string idProperty = dbSetReflection.GetIdProperty(entity);
 
-            if (string.IsNullOrEmpty(idProperty)) 
+            if (string.IsNullOrEmpty(idProperty))
                 throw new NullReferenceException(nameof(idProperty));
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
@@ -342,8 +342,8 @@ namespace MyOwnORM
 
                 string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
                 dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
-                List<string> tables = dbSetExtension.FindTablesNameWithForeignKeysForCascadeDelete(typeof(T).Name);
-                List<string> fks = dbSetExtension.FindForeignKeysNameInTablesForCascadeDelete(typeof(T).Name);
+                List<string> tables = await dbSetExtension.FindTablesNameWithForeignKeysForCascadeDelete(typeof(T).Name);
+                List<string> fks = await dbSetExtension.FindForeignKeysNameInTablesForCascadeDelete(typeof(T).Name);
 
                 for (int i = 0; i < tables.Count; i++)
                 {

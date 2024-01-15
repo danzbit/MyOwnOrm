@@ -5,7 +5,7 @@ using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MyOwnORM.Repository
+namespace MyOwnORM.Interface
 {
     public interface ICustomDbSetRepository<T> where T : class
     {

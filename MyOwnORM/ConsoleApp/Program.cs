@@ -5,6 +5,7 @@ using MyOwnORM;
 using TableAttribute = MyOwnORM.TableAttribute;
 using ForeignKeyAttribute = MyOwnORM.ForeignKeyAttribute;
 using StringLengthAttribute = MyOwnORM.StringLengthAttribute;
+using MyOwnORM.Implementations;
 
 namespace Program
 {

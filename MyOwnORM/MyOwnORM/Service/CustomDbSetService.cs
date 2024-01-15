@@ -18,12 +18,12 @@ namespace MyOwnORM
         {
             _connectionString = connectionString;
         }
-        public List<string> FindTablesNameWithForeignKeysForCascadeDelete(string tableName)
+        public async Task<List<string>> FindTablesNameWithForeignKeysForCascadeDelete(string tableName)
         {
             List<string> res = new List<string>();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string query = $"SELECT " +
                     $"TP.name AS TableName " +
@@ -37,9 +37,9 @@ namespace MyOwnORM
                     $"RF.name = '{tableName}';";
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    using (SqlDataReader reader = command.ExecuteReader())
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
                     {
-                        while (reader.Read())
+                        while (await reader.ReadAsync())
                         {
                             object table = reader["TableName"];
                             res.Add(table.ToString());
@@ -51,12 +51,12 @@ namespace MyOwnORM
             return res;
         }
 
-        public List<string> FindForeignKeysNameInTablesForCascadeDelete(string tableName)
+        public async Task<List<string>> FindForeignKeysNameInTablesForCascadeDelete(string tableName)
         {
             List<string> res = new List<string>();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 string query = $"SELECT " +
                     $"COL_NAME(FK.parent_object_id, FKC.parent_column_id) AS ForeignKeyColumnName " +
@@ -67,9 +67,9 @@ namespace MyOwnORM
                     $"WHERE RF.name = '{tableName}';";
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    using (SqlDataReader reader = command.ExecuteReader())
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
                     {
-                        while (reader.Read())
+                        while (await reader.ReadAsync())
                         {
                             object table = reader["ForeignKeyColumnName"];
                             res.Add(table.ToString());

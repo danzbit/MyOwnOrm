@@ -26,20 +26,7 @@ namespace MyOwnORM
             get { return _connectionString; }
         }
 
-        protected virtual void OnConfiguring(CustomDbContextOptionsBuilder optionsBuilder) 
-        {
-
-        }
-
-        public void EnsureCreated()
-        {
-            using (SqlConnection connection = new SqlConnection(_connectionString))
-            {
-                connection.Open();
-                Console.WriteLine("Connection opened!");
-            }
-        }
-
+ 
         public void Dispose()
         {
             

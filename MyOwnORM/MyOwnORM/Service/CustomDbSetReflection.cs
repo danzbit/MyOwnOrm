@@ -1,6 +1,6 @@
 ﻿using Microsoft.CSharp.RuntimeBinder;
 using MyOwnORM.Attributes;
-using MyOwnORM.Reflection.Helpers;
+using MyOwnORM.Helper;
 using System;
 using System.Collections;
 using System.Collections.Generic;
