@@ -15,8 +15,9 @@ using System.Threading.Tasks;
 
 namespace MyOwnORM.Reflection
 {
-    public class CustomDbSetReflection<T> : CustomDbSetReflectionHelper<T> where T : class
+    public class CustomDbSetReflection<T>  where T : class
     {
+        private CustomDbSetReflectionHelper<T> reflectionHelper;
         private CustomDbSetService<T> dbSetService;
 
         public T MapReaderToEntity(SqlDataReader reader)
@@ -64,10 +65,10 @@ namespace MyOwnORM.Reflection
             return string.Empty;
         }
 
-        public string GetForeignKeyAttribute(dynamic obj)
+        public string GetForeignKeyAttribute(Type obj)
         {
             T targetType = Activator.CreateInstance<T>();
-            PropertyInfo[] properties = obj.GetType().GetProperties();
+            PropertyInfo[] properties = obj.GetProperties();
 
             foreach (var property in properties)
             {
@@ -294,14 +295,14 @@ namespace MyOwnORM.Reflection
                         if (properyType.IsGenericType)
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string[] strs = MapListEntitiesPropertyValuesInUpdateString(entity, idProperty);
+                            string[] strs = reflectionHelper.MapListEntitiesPropertyValuesInUpdateString(entity, idProperty);
                             string[] queryIes = dbSetService.GenerateUpdateSqlQueries(strs, property.Name, idProperty, idPropertyValue);
                             queries.AddRange(queryIes);
                         }
                         else if (properyType.IsClass && properyType != typeof(string))
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string str = MapEntityPropertyValuesInUpdateString(entity, idProperty);
+                            string str = reflectionHelper.MapEntityPropertyValuesInUpdateString(entity.GetType(), idProperty);
                             string query = dbSetService.GenerateUpdateSqlQuery(str, property.Name, idProperty, idPropertyValue);
                             queries.Add(query);
                         }
@@ -330,14 +331,14 @@ namespace MyOwnORM.Reflection
                         if (properyType.IsGenericType)
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string[] strs = MapListEntitiesPropertyValuesInString(entity, property.Name);
+                            string[] strs = reflectionHelper.MapListEntitiesPropertyValuesInString(entity, property.Name);
                             string[] querIes = dbSetService.GenerateInsertSqlQueries(strs, property.Name);
                             queries.AddRange(querIes);
                         }
                         else if (properyType.IsClass && properyType != typeof(string))
                         {
                             dynamic entity = GetIncludeTypeAndSetValues(obj, name);
-                            string str = MapEntityPropertyValuesInString(entity);
+                            string str = reflectionHelper.MapEntityPropertyValuesInString(entity.GetType());
                             string query = dbSetService.GenerateInsertSqlQuery(str, property.Name);
                             queries.Add(query);
                         }
@@ -396,11 +397,11 @@ namespace MyOwnORM.Reflection
             return entitySecond;
         }
 
-        public object MapToEntityIncludeMethodCustomClass(dynamic includeType, SqlDataReader reader)
+        public object MapToEntityIncludeMethodCustomClass(Type includeType, SqlDataReader reader)
         {
-            object entitySecond = Activator.CreateInstance(includeType.GetType());
+            object entitySecond = Activator.CreateInstance(includeType);
 
-            PropertyInfo[] properties = includeType.GetType().GetProperties();
+            PropertyInfo[] properties = includeType.GetProperties();
 
             foreach (PropertyInfo propertySecond in properties)
             {
@@ -413,7 +414,7 @@ namespace MyOwnORM.Reflection
                 {
                     ordinalSecond = reader.GetOrdinal(propertyNameSecond);
                 }
-                catch (IndexOutOfRangeException e)
+                catch (IndexOutOfRangeException)
                 {
                     continue;
                 }

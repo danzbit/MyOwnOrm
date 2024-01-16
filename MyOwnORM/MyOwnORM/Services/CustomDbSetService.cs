@@ -13,7 +13,7 @@ namespace MyOwnORM
     public class CustomDbSetService<T> where T : class
     {
         private readonly string _connectionString;
-        private CustomDbSetReflection<T> dbSetReflection;
+        private readonly CustomDbSetReflection<T> dbSetReflection;
         public CustomDbSetService(string connectionString)
         {
             _connectionString = connectionString;
@@ -111,7 +111,7 @@ namespace MyOwnORM
             return string.Empty;
         }
 
-        public string GenerateInsertSqlQuery(string str,string tableName)
+        public string GenerateInsertSqlQuery(string str, string tableName)
         {
             return $"INSERT INTO {tableName} VALUES ({str})"; 
         } 
@@ -143,13 +143,13 @@ namespace MyOwnORM
             return string.IsNullOrEmpty(fkAttribute) ? fk : fkAttribute;
         }
 
-        public string GetForeignKeyNameForCustomClass(dynamic includeType)
+        public string GetForeignKeyNameForCustomClass(Type includeType)
         {
             string fkAttribute = dbSetReflection.GetForeignKeyAttribute(includeType);
             string fk = $"{typeof(T).Name}Id";
             return string.IsNullOrEmpty(fkAttribute) ? fk : fkAttribute;
         }
-        public string GetForeignKeyNameForIncludeExpressionsMethod(dynamic includeType, T entity)
+        public string GetForeignKeyNameForIncludeExpressionsMethod(Type includeType, T entity)
         {
             string fkAttribute = dbSetReflection.GetForeignKeyAttribute(includeType);
             string fk = $"{entity}Id";

@@ -11,7 +11,7 @@ namespace MyOwnORM
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
     public sealed class StringLengthAttribute : ValidationAttribute
     {
-        readonly int _length;
+        private readonly int _length;
         public StringLengthAttribute(int length)
         {
             _length = length;

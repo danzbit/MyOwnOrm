@@ -13,7 +13,7 @@ namespace MyOwnORM.Interface
         public Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>> include);
         public Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>>[] includes);
         public Task<IQueryable<T>> WhereAsync(Expression<Func<T, bool>> predicate);
-        public Task<T> GetByIdAsync(dynamic id);
+        public Task<T> GetByIdAsync(object id);
         public Task InsertAsync(T obj);
         public Task InsertCascadeAsync(T obj);
         public Task UpdateAsync(T obj);

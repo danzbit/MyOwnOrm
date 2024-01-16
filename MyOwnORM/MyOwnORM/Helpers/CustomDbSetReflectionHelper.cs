@@ -17,7 +17,7 @@ namespace MyOwnORM.Helper
             PropertyInfo[] properties = type.GetProperties();
             StringBuilder strBuilder = new StringBuilder();
 
-            for (int i = 0; i < properties.Length; i++)
+            for (int i = 0; i < properties.Length; i++) 
             {
                 PropertyInfo prop = properties[i];
                 object value = prop.GetValue(obj);
@@ -57,11 +57,9 @@ namespace MyOwnORM.Helper
             return strBuilder.ToString();
         }
 
-        public string MapEntityPropertyValuesInString(dynamic obj)
+        public string MapEntityPropertyValuesInString(Type obj)
         {
-            Type type = obj.GetType();
-
-            PropertyInfo[] properties = type.GetProperties();
+            PropertyInfo[] properties = obj.GetProperties();
             StringBuilder strBuilder = new StringBuilder();
 
             for (int i = 0; i < properties.Length; i++)
@@ -108,7 +106,9 @@ namespace MyOwnORM.Helper
                     }
                 }
                 if (isCollectionOrModel == true)
+                {
                     continue;
+                }
 
                 object value = prop.GetValue(obj);
 
@@ -176,11 +176,9 @@ namespace MyOwnORM.Helper
             return strBuilder.ToString();
         }
 
-        public string MapEntityPropertyValuesInUpdateString(dynamic obj, string idProperty)
+        public string MapEntityPropertyValuesInUpdateString(Type obj, string idProperty)
         {
-            Type type = obj.GetType();
-
-            PropertyInfo[] properties = type.GetProperties();
+            PropertyInfo[] properties = obj.GetProperties();
             StringBuilder strBuilder = new StringBuilder();
 
             for (int i = 0; i < properties.Length; i++)
@@ -214,7 +212,7 @@ namespace MyOwnORM.Helper
 
             return strBuilder.ToString();
         }
-        public string[] MapListEntitiesPropertyValuesInUpdateString(dynamic obj, string idProperty)
+        public string[] MapListEntitiesPropertyValuesInUpdateString(object obj, string idProperty)
         {
             List<string> strs = new List<string>();
             Type elementType = obj.GetType().GetGenericArguments()[0];
@@ -225,7 +223,7 @@ namespace MyOwnORM.Helper
 
             dynamic elementInstance = Activator.CreateInstance(elementType);
 
-            foreach (var item in obj)
+            foreach (var item in (IEnumerable<object>)obj)
             {
                 StringBuilder strBuilder = new StringBuilder();
                 PropertyInfo[] propertyInstanceProperties = item.GetType().GetProperties();
@@ -254,7 +252,7 @@ namespace MyOwnORM.Helper
                         }
                         propertyInstanceProperties[i].SetValue(elementInstance, value);
                     }
-                    catch (RuntimeBinderException ex)
+                    catch (RuntimeBinderException)
                     {
                         continue;
                     }
@@ -271,7 +269,7 @@ namespace MyOwnORM.Helper
             return strs.ToArray();
         }
 
-        public string[] MapListEntitiesPropertyValuesInString(dynamic obj, string tableName)
+        public string[] MapListEntitiesPropertyValuesInString(object obj, string tableName)
         {
             List<string> strs = new List<string>();
             Type elementType = obj.GetType().GetGenericArguments()[0];
@@ -280,9 +278,9 @@ namespace MyOwnORM.Helper
 
             MethodInfo addMethod = listType.GetMethod("Add");
 
-            dynamic elementInstance = Activator.CreateInstance(elementType);
+            dynamic elementInstance = Activator.CreateInstance(elementType); 
 
-            foreach (var item in obj)
+            foreach (var item in (IEnumerable<object>)obj)
             {
                 StringBuilder strBuilder = new StringBuilder();
                 PropertyInfo[] propertyInstanceProperties = item.GetType().GetProperties();

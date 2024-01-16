@@ -1,4 +1,5 @@
-﻿using MyOwnORM.Interface;
+﻿using MyOwnORM.Helper;
+using MyOwnORM.Interface;
 using MyOwnORM.Reflection;
 using System;
 using System.Collections;
@@ -20,12 +21,14 @@ namespace MyOwnORM.Implementations
         private string query;
         private CustomDbSetService<T> dbSetExtension;
         private CustomDbSetReflection<T> dbSetReflection;
+        private CustomDbSetReflectionHelper<T> reflectionHelper;
         public CustomDbSetRepository(string connectionString)
         {
             _connectionString = connectionString;
             tableName = typeof(T).Name;
             dbSetExtension = new CustomDbSetService<T>(_connectionString);
             dbSetReflection = new CustomDbSetReflection<T>();
+            reflectionHelper = new CustomDbSetReflectionHelper<T>();
         }
         public async Task<IEnumerable<T>> GetAllAsync()
         {
@@ -137,7 +140,7 @@ namespace MyOwnORM.Implementations
 
                                 if (dbSetReflection.IsCollectionType(propertyInfo))
                                 {
-                                    SetGenericEntityIncludeExpressionsMethod(propertyInfo, entity, includeType[i], idValue, reader);
+                                    SetGenericEntityIncludeExpressionsMethod(propertyInfo, entity.GetType(), includeType[i], idValue, reader);
                                 }
                                 else
                                 {
@@ -180,7 +183,7 @@ namespace MyOwnORM.Implementations
             return entities.AsQueryable();
         }
 
-        public async Task<T> GetByIdAsync(dynamic id)
+        public async Task<T> GetByIdAsync(object id)
         {
             T entity = Activator.CreateInstance<T>();
             string idProperty = dbSetReflection.GetIdProperty(entity);
@@ -214,7 +217,7 @@ namespace MyOwnORM.Implementations
             {
                 await connection.OpenAsync();
 
-                string values = dbSetReflection.MapEntityPropertyValuesInString(obj);
+                string values = reflectionHelper.MapEntityPropertyValuesInString(obj);
 
                 query = $"INSERT INTO {tableName} VALUE ({values})";
 
@@ -230,7 +233,7 @@ namespace MyOwnORM.Implementations
                 bool hasRowInDataBase = false;
                 await connection.OpenAsync();
 
-                string values = dbSetReflection.MapEntityPropertyValuesInString(obj, names);
+                string values = reflectionHelper.MapEntityPropertyValuesInString(obj, names);
                 string idNameEntity = dbSetReflection.GetIdProperty(obj);
                 string idEntity = dbSetReflection.GetIdPropertyValue(obj);
 
@@ -281,7 +284,7 @@ namespace MyOwnORM.Implementations
             {
                 await connection.OpenAsync();
 
-                string updateStr = dbSetReflection.MapEntityPropertyValuesInUpdateString(obj);
+                string updateStr = reflectionHelper.MapEntityPropertyValuesInUpdateString(obj);
                 string idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
 
                 query = $"UPDATE {tableName} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
@@ -302,7 +305,7 @@ namespace MyOwnORM.Implementations
             {
                 await connection.OpenAsync();
 
-                string updateStr = dbSetReflection.MapEntityPropertyValuesInUpdateString(obj, idProperty);
+                string updateStr = reflectionHelper.MapEntityPropertyValuesInUpdateString(obj, idProperty);
                 string idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
 
                 string query = $"UPDATE {typeof(T).Name} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
@@ -394,7 +397,7 @@ namespace MyOwnORM.Implementations
             }
             return null;
         }
-        private void FindSetMethod(PropertyInfo property, string idValue, T entity, string propVal, dynamic includeType)
+        private void FindSetMethod(PropertyInfo property, string idValue, T entity, string propVal, Type includeType)
         {
             if (property.PropertyType.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)) && property.Name == propVal)
             {
@@ -433,14 +436,14 @@ namespace MyOwnORM.Implementations
                 }
             }
         }
-        private void SetClassEntity(dynamic includeType, string idValue, PropertyInfo property, T entity)
+        private void SetClassEntity(Type includeType, string idValue, PropertyInfo property, T entity)
         {
             string fkChoose = dbSetExtension.GetForeignKeyNameForCustomClass(includeType);
             using (SqlConnection connectionSecond = new SqlConnection(_connectionString))
             {
                 connectionSecond.Open();
 
-                string query = $"SELECT * FROM {includeType.GetType().Name} WHERE {fkChoose} = @Id";
+                string query = $"SELECT * FROM {includeType.Name} WHERE {fkChoose} = @Id";
 
                 using (SqlCommand commandSecond = new SqlCommand(query, connectionSecond))
                 {
@@ -458,7 +461,7 @@ namespace MyOwnORM.Implementations
             }
         }
 
-        private void SetGenericEntityIncludeExpressionsMethod(PropertyInfo propertyInfo, dynamic includeType, T entity, string idValue, SqlDataReader reader)
+        private void SetGenericEntityIncludeExpressionsMethod(PropertyInfo propertyInfo, Type includeType, T entity, string idValue, SqlDataReader reader)
         {
             Type elementType = dbSetReflection.GetTypeCollectionArguments(propertyInfo);
             IList entitiesSecond = dbSetReflection.GetIListType(propertyInfo);
@@ -490,7 +493,7 @@ namespace MyOwnORM.Implementations
             propertyInfo.SetValue(entity, entitiesSecond);
         }
 
-        public void SetEntityIncludeExpressionsMethod(dynamic includeType, T entity, PropertyInfo propertyInfo, string idValue, SqlDataReader reader, Type propertyType)
+        public void SetEntityIncludeExpressionsMethod(Type includeType, T entity, PropertyInfo propertyInfo, string idValue, SqlDataReader reader, Type propertyType)
         {
             string fkChoose = dbSetExtension.GetForeignKeyNameForIncludeExpressionsMethod(includeType, entity);
 

@@ -10,6 +10,10 @@ namespace MyOwnORM
     public sealed class ForeignKeyAttribute : Attribute
     {
         public Type TargetType { get; }
+        public ForeignKeyAttribute()
+        {
+            
+        }
 
         public ForeignKeyAttribute(Type targetType)
         {
