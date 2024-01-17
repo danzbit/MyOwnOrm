@@ -17,7 +17,7 @@ namespace SeaBattleDomainModel.Models
 
         [Column("PointY")]
         public int Y { get; set; }
-
+        [NotMapped]
         public int Quadrant
         {
             get { return Quadrant; }

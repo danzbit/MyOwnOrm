@@ -7,19 +7,19 @@ using System.Threading.Tasks;
 
 namespace MyOwnORM.Interface
 {
-    public interface ICustomDbSetRepository<T> where T : class
+    public interface ICustomDbSetRepository<T, TKey> where T : class
     {
         public Task<IEnumerable<T>> GetAllAsync();
         public Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>> include);
         public Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>>[] includes);
         public Task<IQueryable<T>> WhereAsync(Expression<Func<T, bool>> predicate);
-        public Task<T> GetByIdAsync<TKey>(TKey id);
+        public Task<T> GetByIdAsync(TKey id);
         public Task InsertAsync(T obj);
         public Task InsertCascadeAsync(T obj);
         public Task UpdateAsync(T obj);
         public Task UpdateCascadeAsync(T obj);
         public Task DeleteAsync(Expression<Func<T, bool>> predicate);
-        public Task DeleteByIdAsync<TKey>(TKey id);
+        public Task DeleteByIdAsync(TKey id);
         public Task DeleteCascadeAsync(Expression<Func<T, bool>> predicate);
         public Task<object> FromSqlRawAsync(string sql);
 

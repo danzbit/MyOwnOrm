@@ -11,19 +11,19 @@ namespace Program
     {
         public Context(string connectionString) : base(connectionString)
         {
-            Coords = new CustomDbSetRepository<Coords>(connectionString);
-            Fields = new CustomDbSetRepository<Field>(connectionString);
-            MilitaryShips = new CustomDbSetRepository<MilitaryShip>(connectionString);
-            MixedFunctionShips = new CustomDbSetRepository<MixedFunctionShip>(connectionString);
-            Positions = new CustomDbSetRepository<Position>(connectionString);
-            RepairerShips = new CustomDbSetRepository<RepairerShip>(connectionString);
+            Coords = new CustomDbSetRepository<Coords, Guid>(connectionString);
+            Fields = new CustomDbSetRepository<Field, Guid>(connectionString);
+            MilitaryShips = new CustomDbSetRepository<MilitaryShip, Guid>(connectionString);
+            MixedFunctionShips = new CustomDbSetRepository<MixedFunctionShip, Guid>(connectionString);
+            Positions = new CustomDbSetRepository<Position, Guid>(connectionString);
+            RepairerShips = new CustomDbSetRepository<RepairerShip, Guid>(connectionString);
         }
-        public CustomDbSetRepository<Coords> Coords { get; set; }
-        public CustomDbSetRepository<Field> Fields { get; set; }
-        public CustomDbSetRepository<MilitaryShip> MilitaryShips { get; set; }
-        internal CustomDbSetRepository<MixedFunctionShip> MixedFunctionShips { get; set; }
-        public CustomDbSetRepository<Position> Positions { get; set; }
-        internal CustomDbSetRepository<RepairerShip> RepairerShips { get; set; }
+        public CustomDbSetRepository<Coords, Guid> Coords { get; set; }
+        public CustomDbSetRepository<Field, Guid> Fields { get; set; }
+        public CustomDbSetRepository<MilitaryShip, Guid> MilitaryShips { get; set; }
+        internal CustomDbSetRepository<MixedFunctionShip, Guid> MixedFunctionShips { get; set; }
+        public CustomDbSetRepository<Position, Guid> Positions { get; set; }
+        internal CustomDbSetRepository<RepairerShip, Guid> RepairerShips { get; set; }
     }
     public static class Program
     {

@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace MyOwnORM.Implementations
 {
-    public class CustomDbSetRepository<T> : ICustomDbSetRepository<T> where T : class
+    public class CustomDbSetRepository<T, TKey> : ICustomDbSetRepository<T, TKey> where T : class
     {
         private string _connectionString;
         private string tableName;
@@ -183,7 +183,7 @@ namespace MyOwnORM.Implementations
             return entities.AsQueryable();
         }
 
-        public async Task<T> GetByIdAsync<TKey>(TKey id)
+        public async Task<T> GetByIdAsync(TKey id)
         {
             T entity = Activator.CreateInstance<T>();
             string idProperty = dbSetReflection.GetIdProperty(entity);
@@ -337,7 +337,7 @@ namespace MyOwnORM.Implementations
                 await command.ExecuteNonQueryAsync();
             }
         }
-        public async Task DeleteByIdAsync<TKey>(TKey id)
+        public async Task DeleteByIdAsync(TKey id)
         {
             T entity = Activator.CreateInstance<T>();
             string idProperty = dbSetReflection.GetIdProperty(entity);
