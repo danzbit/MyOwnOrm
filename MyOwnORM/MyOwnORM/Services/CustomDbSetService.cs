@@ -86,9 +86,10 @@ namespace MyOwnORM
             var binaryExpression = propertyLambda.Body as BinaryExpression;
             var memberExpression = binaryExpression.Left as MemberExpression;
             var propertyInfo = memberExpression.Member as PropertyInfo;
-            return propertyInfo.Name;
+
+            return dbSetReflection.GetColumnName(propertyInfo);
         }
-        public dynamic GetValueInLambdaExpression(Expression<Func<T, bool>> propertyLambda)
+        public object GetValueInLambdaExpression(Expression<Func<T, bool>> propertyLambda)
         {
             var binaryExpression = propertyLambda.Body as BinaryExpression;
             var memberExpression = binaryExpression.Right.ToString();

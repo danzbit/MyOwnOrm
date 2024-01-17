@@ -9,13 +9,13 @@ namespace SeaBattleDomainModel.Models
     [Table("Coord")]
     public class Coords
     {
-        [CustomPrimaryKey("Id")]
+        [CustomPrimaryKey("CoordId")]
         public Guid Id { get; set; }
 
-        [Column("X")]
+        [Column("PointX")]
         public int X { get; set; }
 
-        [Column("Y")]
+        [Column("PointY")]
         public int Y { get; set; }
 
         public int Quadrant

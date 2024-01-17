@@ -36,7 +36,6 @@ namespace MyOwnORM.Reflection
             return entity;
         }
 
-
         public string GetIdProperty(T obj)
         {
             Type type = obj.GetType();
@@ -112,9 +111,9 @@ namespace MyOwnORM.Reflection
             return result;
         }
 
-        public dynamic[] GetIncludeTypes(Expression<Func<T, object>>[] includes)
+        public object[] GetIncludeTypes(Expression<Func<T, object>>[] includes)
         {
-            List<dynamic> result = new List<dynamic>();
+            List<object> result = new List<object>();
 
             foreach (var include in includes)
             {
@@ -132,10 +131,12 @@ namespace MyOwnORM.Reflection
                         {
                             Type elementType = propertyType.GetGenericArguments()[0];
                             Type listType = typeof(List<>).MakeGenericType(elementType);
-                            dynamic listInstance = Activator.CreateInstance(listType);
+                            object listInstance = Activator.CreateInstance(listType);
 
-                            dynamic elementInstance = Activator.CreateInstance(elementType);
-                            listInstance.Add(elementInstance);
+                            MethodInfo addMethod = listType.GetMethod("Add"); 
+
+                            object elementInstance = Activator.CreateInstance(elementType);
+                            addMethod?.Invoke(listInstance, new[] { elementInstance });
 
                             result.Add(listInstance);
                         }
@@ -158,7 +159,7 @@ namespace MyOwnORM.Reflection
             return result.ToArray();
         }
 
-        public dynamic GetIncludeType(Expression<Func<T, object>> include)
+        public object GetIncludeType(Expression<Func<T, object>> include)
         {
             string propVal = dbSetService.GetPropertyValue(include);
 
@@ -174,10 +175,12 @@ namespace MyOwnORM.Reflection
                     {
                         Type elementType = propertyType.GetGenericArguments()[0];
                         Type listType = typeof(List<>).MakeGenericType(elementType);
-                        dynamic listInstance = Activator.CreateInstance(listType);
+                        object listInstance = Activator.CreateInstance(listType);
 
-                        dynamic elementInstance = Activator.CreateInstance(elementType);
-                        listInstance.Add(elementInstance);
+                        MethodInfo addMethod = listType.GetMethod("Add");
+
+                        object elementInstance = Activator.CreateInstance(elementType);
+                        addMethod?.Invoke(listInstance, new[] { elementInstance });
 
                         return listInstance;
                     }
@@ -223,7 +226,7 @@ namespace MyOwnORM.Reflection
             return res.ToArray();
         }
 
-        public dynamic GetIncludeTypeAndSetValues(T obj, string propVal)
+        public object GetIncludeTypeAndSetValues(T obj, string propVal)
         {
             PropertyInfo[] properties = typeof(T).GetProperties();
 
@@ -237,15 +240,15 @@ namespace MyOwnORM.Reflection
                     {
                         Type elementType = propertyType.GetGenericArguments()[0];
                         Type listType = typeof(List<>).MakeGenericType(elementType);
-                        dynamic listInstance = Activator.CreateInstance(listType);
+                        object listInstance = Activator.CreateInstance(listType);
 
                         MethodInfo addMethod = listType.GetMethod("Add");
 
-                        dynamic propertyValue = property.GetValue(obj);
+                        object propertyValue = property.GetValue(obj);
 
-                        foreach (var item in propertyValue)
+                        foreach (var item in (IEnumerable<object>)propertyValue)
                         {
-                            dynamic elementInstance = Activator.CreateInstance(elementType);
+                            object elementInstance = Activator.CreateInstance(elementType);
 
                             PropertyInfo[] propertyInstanceProperties = item.GetType().GetProperties();
                             foreach (var prop in propertyInstanceProperties)
@@ -294,14 +297,14 @@ namespace MyOwnORM.Reflection
                     {
                         if (properyType.IsGenericType)
                         {
-                            dynamic entity = GetIncludeTypeAndSetValues(obj, name);
+                            object entity = GetIncludeTypeAndSetValues(obj, name);
                             string[] strs = reflectionHelper.MapListEntitiesPropertyValuesInUpdateString(entity, idProperty);
                             string[] queryIes = dbSetService.GenerateUpdateSqlQueries(strs, property.Name, idProperty, idPropertyValue);
                             queries.AddRange(queryIes);
                         }
                         else if (properyType.IsClass && properyType != typeof(string))
                         {
-                            dynamic entity = GetIncludeTypeAndSetValues(obj, name);
+                            object entity = GetIncludeTypeAndSetValues(obj, name);
                             string str = reflectionHelper.MapEntityPropertyValuesInUpdateString(entity.GetType(), idProperty);
                             string query = dbSetService.GenerateUpdateSqlQuery(str, property.Name, idProperty, idPropertyValue);
                             queries.Add(query);
@@ -312,8 +315,6 @@ namespace MyOwnORM.Reflection
 
             return queries.ToArray();
         }
-
-
 
         public string[] InsertCascadeModelsOrCollection(T obj, string[] names)
         {
@@ -330,14 +331,14 @@ namespace MyOwnORM.Reflection
                     {
                         if (properyType.IsGenericType)
                         {
-                            dynamic entity = GetIncludeTypeAndSetValues(obj, name);
+                            object entity = GetIncludeTypeAndSetValues(obj, name);
                             string[] strs = reflectionHelper.MapListEntitiesPropertyValuesInString(entity, property.Name);
                             string[] querIes = dbSetService.GenerateInsertSqlQueries(strs, property.Name);
                             queries.AddRange(querIes);
                         }
                         else if (properyType.IsClass && properyType != typeof(string))
                         {
-                            dynamic entity = GetIncludeTypeAndSetValues(obj, name);
+                            object entity = GetIncludeTypeAndSetValues(obj, name);
                             string str = reflectionHelper.MapEntityPropertyValuesInString(entity.GetType());
                             string query = dbSetService.GenerateInsertSqlQuery(str, property.Name);
                             queries.Add(query);
@@ -510,6 +511,34 @@ namespace MyOwnORM.Reflection
         public PropertyInfo GetPropertyInfo(string propVal)
         {
             return typeof(T).GetProperty(propVal);
+        }
+
+        public string GetTableName()
+        {
+            var tableAttribute = typeof(T).GetCustomAttributes(
+                typeof(TableAttribute), true
+            ).FirstOrDefault() as TableAttribute;
+            if (tableAttribute != null)
+            {
+                return tableAttribute.Name;
+            }
+                
+            return typeof(T).Name;
+        }
+
+        public string GetColumnName(PropertyInfo property)
+        {
+            object[] attrs = property.GetCustomAttributes(true);
+            foreach (var attr in attrs)
+            {
+                ColumnAttribute columnAttribute = attr as ColumnAttribute;
+                if (columnAttribute != null)
+                {
+                    return columnAttribute.Column;
+                }
+            }
+
+            return property.Name;
         }
     }
 }

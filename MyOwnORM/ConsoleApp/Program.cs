@@ -25,9 +25,9 @@ namespace Program
         public CustomDbSetRepository<Position> Positions { get; set; }
         internal CustomDbSetRepository<RepairerShip> RepairerShips { get; set; }
     }
-    public class Program
+    public static class Program
     {
-        public static async void StartProgram()
+        public static async Task StartProgram()
         {
             Context context = new Context("Data Source=1068001579A\\SQLEXPRESS;Initial Catalog=TestDbMyOrm;Trusted_Connection=True;TrustServerCertificate=True;");
             var p = await context.Coords.GetAllAsync();
@@ -114,7 +114,7 @@ namespace Program
             await context.Coords.DeleteAsync(p => p.Id == Guid.NewGuid());
             //Cascade delete
             await context.Positions.DeleteCascadeAsync(p => p.Id == Guid.NewGuid());
-            dynamic p3 = await context.Coords.FromSqlRawAsync($"SELECT * FROM Cords WHERE Id = {Guid.NewGuid()}");
+            object p3 = await context.Coords.FromSqlRawAsync($"SELECT * FROM Cords WHERE Id = {Guid.NewGuid()}");
             //Eager loading
             var p4 = context.Positions.IncludeAsync(p => p.Points);
             Expression<Func<Field, object>>[] expressions = new Expression<Func<Field, object>>[]

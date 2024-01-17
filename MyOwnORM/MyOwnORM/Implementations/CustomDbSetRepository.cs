@@ -25,10 +25,10 @@ namespace MyOwnORM.Implementations
         public CustomDbSetRepository(string connectionString)
         {
             _connectionString = connectionString;
-            tableName = typeof(T).Name;
             dbSetExtension = new CustomDbSetService<T>(_connectionString);
             dbSetReflection = new CustomDbSetReflection<T>();
             reflectionHelper = new CustomDbSetReflectionHelper<T>();
+            tableName = dbSetReflection.GetTableName();
         }
         public async Task<IEnumerable<T>> GetAllAsync()
         {
@@ -183,7 +183,7 @@ namespace MyOwnORM.Implementations
             return entities.AsQueryable();
         }
 
-        public async Task<T> GetByIdAsync(object id)
+        public async Task<T> GetByIdAsync<TKey>(TKey id)
         {
             T entity = Activator.CreateInstance<T>();
             string idProperty = dbSetReflection.GetIdProperty(entity);
@@ -237,7 +237,7 @@ namespace MyOwnORM.Implementations
                 string idNameEntity = dbSetReflection.GetIdProperty(obj);
                 string idEntity = dbSetReflection.GetIdPropertyValue(obj);
 
-                string checkQuery = $"SELECT * FROM {typeof(T).Name} WHERE {idNameEntity} = {idEntity}";
+                string checkQuery = $"SELECT * FROM {tableName} WHERE {idNameEntity} = {idEntity}";
 
                 using (SqlCommand commandCheck = new SqlCommand(checkQuery, connection))
                 {
@@ -257,7 +257,7 @@ namespace MyOwnORM.Implementations
 
                 if (!hasRowInDataBase)
                 {
-                    string query = $"INSERT INTO {typeof(T).Name} VALUES ({values})";
+                    string query = $"INSERT INTO {tableName} VALUES ({values})";
 
                     SqlCommand command = new SqlCommand(query, connection);
                     await command.ExecuteNonQueryAsync();
@@ -308,7 +308,7 @@ namespace MyOwnORM.Implementations
                 string updateStr = reflectionHelper.MapEntityPropertyValuesInUpdateString(obj, idProperty);
                 string idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
 
-                string query = $"UPDATE {typeof(T).Name} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
+                string query = $"UPDATE {tableName} SET {updateStr} WHERE {idProperty}={idPropertyValue}";
 
                 SqlCommand command = new SqlCommand(query, connection);
                 await command.ExecuteNonQueryAsync();
@@ -337,7 +337,7 @@ namespace MyOwnORM.Implementations
                 await command.ExecuteNonQueryAsync();
             }
         }
-        public async Task DeleteByIdAsync(object id)
+        public async Task DeleteByIdAsync<TKey>(TKey id)
         {
             T entity = Activator.CreateInstance<T>();
             string idProperty = dbSetReflection.GetIdProperty(entity);
@@ -369,13 +369,13 @@ namespace MyOwnORM.Implementations
                     await commandCascadeDelete.ExecuteNonQueryAsync();
                 }
 
-                string query = $"DELETE FROM {typeof(T).Name} WHERE {key}={val}";
+                string query = $"DELETE FROM {tableName} WHERE {key}={val}";
 
                 SqlCommand command = new SqlCommand(query, connection);
                 await command.ExecuteNonQueryAsync();
             }
         }
-        public async Task<dynamic> FromSqlRawAsync(string sql)
+        public async Task<object> FromSqlRawAsync(string sql)
         {
             string keyWord = sql.Split()[0] + sql.Split()[1];
             List<T> entities = new List<T>();

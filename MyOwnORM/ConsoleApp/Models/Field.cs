@@ -7,7 +7,7 @@ namespace SeaBattleDomainModel.Models
     [Table("Field")]
     public class Field
     {
-        [CustomPrimaryKey("Id")]
+        [CustomPrimaryKey("FieldId")]
         public Guid Id { get; set; }
         [StringLength(56, ErrorMessage = "{0} value does not match the mask {1}.")]
         public string Name { get; set; }

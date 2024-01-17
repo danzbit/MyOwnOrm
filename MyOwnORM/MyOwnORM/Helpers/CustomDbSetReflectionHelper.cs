@@ -217,11 +217,11 @@ namespace MyOwnORM.Helper
             List<string> strs = new List<string>();
             Type elementType = obj.GetType().GetGenericArguments()[0];
             Type listType = typeof(List<>).MakeGenericType(elementType);
-            dynamic listInstance = Activator.CreateInstance(listType);
+            object listInstance = Activator.CreateInstance(listType);
 
             MethodInfo addMethod = listType.GetMethod("Add");
 
-            dynamic elementInstance = Activator.CreateInstance(elementType);
+            object elementInstance = Activator.CreateInstance(elementType);
 
             foreach (var item in (IEnumerable<object>)obj)
             {
@@ -274,11 +274,11 @@ namespace MyOwnORM.Helper
             List<string> strs = new List<string>();
             Type elementType = obj.GetType().GetGenericArguments()[0];
             Type listType = typeof(List<>).MakeGenericType(elementType);
-            dynamic listInstance = Activator.CreateInstance(listType);
+            object listInstance = Activator.CreateInstance(listType);
 
             MethodInfo addMethod = listType.GetMethod("Add");
 
-            dynamic elementInstance = Activator.CreateInstance(elementType); 
+            object elementInstance = Activator.CreateInstance(elementType); 
 
             foreach (var item in (IEnumerable<object>)obj)
             {
