@@ -19,9 +19,9 @@ namespace MyOwnORM.Implementations
         private string _connectionString;
         private string tableName;
         private string query;
-        private CustomDbSetService<T> dbSetExtension;
-        private CustomDbSetReflection<T> dbSetReflection;
-        private CustomDbSetReflectionHelper<T> reflectionHelper;
+        private readonly CustomDbSetService<T> dbSetExtension;
+        private readonly CustomDbSetReflection<T> dbSetReflection;
+        private readonly CustomDbSetReflectionHelper<T> reflectionHelper;
         public CustomDbSetRepository(string connectionString)
         {
             _connectionString = connectionString;
@@ -61,7 +61,7 @@ namespace MyOwnORM.Implementations
             List<T> entities = new List<T>();
 
             string propVal = dbSetExtension.GetPropertyValue(include);
-            dynamic includeType = dbSetReflection.GetIncludeType(include);
+            object includeType = dbSetReflection.GetIncludeType(include);
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -89,7 +89,7 @@ namespace MyOwnORM.Implementations
                             }
                             catch (IndexOutOfRangeException)
                             {
-                                FindSetMethod(property, idValue, entity, propVal, includeType);
+                                FindSetMethod(property, idValue, entity, propVal, includeType.GetType());
                                 continue;
                             }
 
@@ -131,7 +131,7 @@ namespace MyOwnORM.Implementations
                         foreach (var include in includes)
                         {
                             List<string> propVal = dbSetReflection.GetPropertyValues(new Expression<Func<T, object>>[] { include });
-                            dynamic[] includeType = dbSetReflection.GetIncludeTypes(new Expression<Func<T, object>>[] { include });
+                            object[] includeType = dbSetReflection.GetIncludeTypes(new Expression<Func<T, object>>[] { include });
 
                             for (int i = 0; i < propVal.Count; i++)
                             {
@@ -140,11 +140,11 @@ namespace MyOwnORM.Implementations
 
                                 if (dbSetReflection.IsCollectionType(propertyInfo))
                                 {
-                                    SetGenericEntityIncludeExpressionsMethod(propertyInfo, entity.GetType(), includeType[i], idValue, reader);
+                                    SetGenericEntityIncludeExpressionsMethod(propertyInfo, includeType[i].GetType(), entity, idValue, reader);
                                 }
                                 else
                                 {
-                                    SetEntityIncludeExpressionsMethod(includeType[i], entity, propertyInfo, idValue, reader, propertyType);
+                                    SetEntityIncludeExpressionsMethod(includeType[i].GetType(), entity, propertyInfo, idValue, reader, propertyType);
                                 }
                             }
                         }
@@ -164,7 +164,7 @@ namespace MyOwnORM.Implementations
                 await connection.OpenAsync();
 
                 string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
-                dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
+                object val = dbSetExtension.GetValueInLambdaExpression(predicate);
 
                 query = $"SELECT * FROM {tableName} WHERE {key} = {val}";
                 using (SqlCommand command = new SqlCommand(query, connection))
@@ -329,9 +329,23 @@ namespace MyOwnORM.Implementations
                 await connection.OpenAsync();
 
                 string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
-                dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
+                object val = dbSetExtension.GetValueInLambdaExpression(predicate);
 
                 query = $"DELETE FROM {tableName} WHERE {key}={val}";
+
+                SqlCommand command = new SqlCommand(query, connection);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+        public async Task DeleteByIdAsync(object id)
+        {
+            T entity = Activator.CreateInstance<T>();
+            string idProperty = dbSetReflection.GetIdProperty(entity);
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                query = $"DELETE FROM {tableName} WHERE {idProperty}={id}";
 
                 SqlCommand command = new SqlCommand(query, connection);
                 await command.ExecuteNonQueryAsync();
@@ -344,7 +358,7 @@ namespace MyOwnORM.Implementations
                 await connection.OpenAsync();
 
                 string key = dbSetExtension.GetKeyInLambdaExpression(predicate);
-                dynamic val = dbSetExtension.GetValueInLambdaExpression(predicate);
+                object val = dbSetExtension.GetValueInLambdaExpression(predicate);
                 List<string> tables = await dbSetExtension.FindTablesNameWithForeignKeysForCascadeDelete(typeof(T).Name);
                 List<string> fks = await dbSetExtension.FindForeignKeysNameInTablesForCascadeDelete(typeof(T).Name);
 
@@ -390,8 +404,7 @@ namespace MyOwnORM.Implementations
                     }
                     else
                     {
-                        object scalar = await command.ExecuteScalarAsync();
-                        return scalar;
+                        await command.ExecuteScalarAsync();
                     }
                 }
             }
@@ -493,7 +506,7 @@ namespace MyOwnORM.Implementations
             propertyInfo.SetValue(entity, entitiesSecond);
         }
 
-        public void SetEntityIncludeExpressionsMethod(Type includeType, T entity, PropertyInfo propertyInfo, string idValue, SqlDataReader reader, Type propertyType)
+        private void SetEntityIncludeExpressionsMethod(Type includeType, T entity, PropertyInfo propertyInfo, string idValue, SqlDataReader reader, Type propertyType)
         {
             string fkChoose = dbSetExtension.GetForeignKeyNameForIncludeExpressionsMethod(includeType, entity);
 

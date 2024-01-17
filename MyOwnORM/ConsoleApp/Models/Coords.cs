@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace SeaBattleDomainModel.Models
 {
-    [Table("Coords")]
+    [Table("Coord")]
     public class Coords
     {
         [CustomPrimaryKey("Id")]
@@ -18,7 +18,6 @@ namespace SeaBattleDomainModel.Models
         [Column("Y")]
         public int Y { get; set; }
 
-        [Column("Quadrant")]
         public int Quadrant
         {
             get { return Quadrant; }

@@ -6,10 +6,10 @@ using System.Linq;
 using System.Text;
 namespace SeaBattleDomainModel
 {
-    [Table("RepairerShip")]
+    [Table("RepaireShip")]
     internal class RepairerShip : Ship, IRepairable
     {
-        [Column("MaxDistanceToFix")]
+        [Column("DistanceToFixMax")]
         public int MaxDistanceToFix { get; set; }
 
         public void Fix()

@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 
 namespace SeaBattleDomainModel.Models
 {
-    [Table("Position")]
     public class Position
     {
         [CustomPrimaryKey]

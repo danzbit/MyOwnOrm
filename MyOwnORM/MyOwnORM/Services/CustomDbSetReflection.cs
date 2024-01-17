@@ -17,8 +17,8 @@ namespace MyOwnORM.Reflection
 {
     public class CustomDbSetReflection<T>  where T : class
     {
-        private CustomDbSetReflectionHelper<T> reflectionHelper;
-        private CustomDbSetService<T> dbSetService;
+        private readonly CustomDbSetReflectionHelper<T> reflectionHelper;
+        private readonly CustomDbSetService<T> dbSetService;
 
         public T MapReaderToEntity(SqlDataReader reader)
         {

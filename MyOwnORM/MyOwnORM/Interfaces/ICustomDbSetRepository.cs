@@ -19,6 +19,7 @@ namespace MyOwnORM.Interface
         public Task UpdateAsync(T obj);
         public Task UpdateCascadeAsync(T obj);
         public Task DeleteAsync(Expression<Func<T, bool>> predicate);
+        public Task DeleteByIdAsync(object id);
         public Task DeleteCascadeAsync(Expression<Func<T, bool>> predicate);
         public Task<dynamic> FromSqlRawAsync(string sql);
 
