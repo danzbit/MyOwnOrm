@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace SeaBattleDomainModel.Models
 {
+    [Table("MilitaryShips")]
     public class MilitaryShip : Ship, IShootable
     {
         [Column("DistanceToShootMax")]

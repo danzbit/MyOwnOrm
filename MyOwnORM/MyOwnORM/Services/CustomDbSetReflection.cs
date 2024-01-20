@@ -4,21 +4,31 @@ using MyOwnORM.Helper;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace MyOwnORM.Reflection
 {
-    public class CustomDbSetReflection<T>  where T : class
+    public class CustomDbSetReflection<T> where T : class
     {
         private readonly CustomDbSetReflectionHelper<T> reflectionHelper;
         private readonly CustomDbSetService<T> dbSetService;
+
+        public CustomDbSetReflection()
+        {
+            
+        }
+        public CustomDbSetReflection(string connectionString)
+        {
+            dbSetService = new CustomDbSetService<T>(connectionString);
+            reflectionHelper = new CustomDbSetReflectionHelper<T>();
+        }
 
         public T MapReaderToEntity(SqlDataReader reader)
         {
@@ -30,7 +40,41 @@ namespace MyOwnORM.Reflection
                 object value = reader.GetValue(i);
 
                 PropertyInfo property = typeof(T).GetProperty(columnName);
-                property.SetValue(entity, value);
+                if (property == null)
+                {
+                    foreach (PropertyInfo prop in typeof(T).GetProperties())
+                    {
+                        if (GetIdOfCustomPKAttribute(prop) == columnName)
+                        {
+                            if (prop.PropertyType == typeof(Guid))
+                            {
+                                prop.SetValue(entity, new Guid(value.ToString()));
+                                
+                            }
+                           else
+                            {
+                                prop.SetValue(entity, value);
+                            }
+                            break;
+                        }
+                        else if (GetNameOfColumnAttribute(prop) == columnName)
+                        {
+                            if (int.TryParse(value.ToString(), out int n))
+                            {
+                                prop.SetValue(entity, n);
+                            }
+                            else
+                            {
+                                prop.SetValue(entity, value);
+                            }
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    property.SetValue(entity, value);
+                }
             }
 
             return entity;
@@ -42,26 +86,38 @@ namespace MyOwnORM.Reflection
             for (int i = 0; i < type.GetProperties().Length; i++)
             {
                 PropertyInfo prop = type.GetProperties()[i];
-                if (prop.Name == "Id")
+                if (Attribute.IsDefined(prop, typeof(CustomPrimaryKeyAttribute)))
+                {
+                    var attr = prop.GetCustomAttribute<CustomPrimaryKeyAttribute>(true);
+                    return attr.Id ?? prop.Name;
+                }
+                else if (prop.Name.ToLower() == "id")
+                {
                     return prop.Name;
-                else if (Attribute.IsDefined(prop, typeof(CustomPrimaryKeyAttribute)))
-                    return prop.Name;
+                }
             }
             return string.Empty;
         }
 
-        public string GetIdPropertyValue(T obj)
+        public object GetIdPropertyValue(T obj)
         {
+            object id = null;
             Type type = typeof(T);
             for (int i = 0; i < type.GetProperties().Length; i++)
             {
-                PropertyInfo prop = type.GetProperties()[i];
+                var prop = type.GetProperties()[i];
                 if (prop.Name == "Id")
-                    return prop.GetValue(obj).ToString();
+                    id = prop.GetValue(obj);
                 else if (Attribute.IsDefined(prop, typeof(CustomPrimaryKeyAttribute)))
-                    return prop.GetValue(obj).ToString();
+                    id = prop.GetValue(obj);
             }
-            return string.Empty;
+
+            if (id != null && (id.GetType() == typeof(string) || id.GetType() == typeof(Guid))) 
+            {
+                return $"'{id}'";
+            }
+
+            return id;
         }
 
         public string GetForeignKeyAttribute(Type obj)
@@ -253,8 +309,15 @@ namespace MyOwnORM.Reflection
                             PropertyInfo[] propertyInstanceProperties = item.GetType().GetProperties();
                             foreach (var prop in propertyInstanceProperties)
                             {
-                                var value = prop.GetValue(item);
-                                prop.SetValue(elementInstance, value);
+                                if (HasNotMappedAttribute(prop))
+                                {
+                                    continue;
+                                }
+                                else
+                                {
+                                    var value = prop.GetValue(item);
+                                    prop.SetValue(elementInstance, value);
+                                }
                             }
 
                             addMethod?.Invoke(listInstance, new object[] { elementInstance });
@@ -270,8 +333,15 @@ namespace MyOwnORM.Reflection
                         PropertyInfo[] propertyInstanceProperties = propertyInstance.GetType().GetProperties();
                         foreach (var prop in propertyInstanceProperties)
                         {
-                            var value = prop.GetValue(propertyValue);
-                            prop.SetValue(propertyInstance, value);
+                            if (HasNotMappedAttribute(prop))
+                            {
+                                prop.SetValue(propertyInstance, null);
+                            }
+                            else
+                            {
+                                var value = prop.GetValue(propertyValue);
+                                prop.SetValue(propertyInstance, value);
+                            }
                         }
 
                         return propertyInstance;
@@ -279,6 +349,26 @@ namespace MyOwnORM.Reflection
                 }
 
             }
+            return null;
+        }
+
+        public object GetGenericType(T obj, string propVal)
+        {
+            PropertyInfo[] properties = typeof(T).GetProperties();
+
+            foreach (PropertyInfo property in properties)
+            {
+                if (property.Name == propVal)
+                {
+                    Type propertyType = property.PropertyType;
+                    if (IsCollectionType(property))
+                    {
+                        Type elementType = propertyType.GetGenericArguments()[0];
+                        return Activator.CreateInstance(elementType);
+                    }
+                }
+            }
+
             return null;
         }
 
@@ -299,7 +389,10 @@ namespace MyOwnORM.Reflection
                         {
                             object entity = GetIncludeTypeAndSetValues(obj, name);
                             string[] strs = reflectionHelper.MapListEntitiesPropertyValuesInUpdateString(entity, idProperty);
-                            string[] queryIes = dbSetService.GenerateUpdateSqlQueries(strs, property.Name, idProperty, idPropertyValue);
+                            object type = GetGenericType(obj, name);
+                            string tableName = GetTableName(obj);
+                            string fk = GetRealFKName(type, tableName);
+                            string[] queryIes = dbSetService.GenerateUpdateSqlQueries(strs, type.GetType().Name, fk, idPropertyValue);
                             queries.AddRange(queryIes);
                         }
                         else if (properyType.IsClass && properyType != typeof(string))
@@ -320,7 +413,7 @@ namespace MyOwnORM.Reflection
         {
             List<string> queries = new List<string>();
 
-            PropertyInfo[] properties = obj.GetType().GetProperties();
+            PropertyInfo[] properties = typeof(T).GetProperties();
 
             foreach (PropertyInfo property in properties)
             {
@@ -332,7 +425,7 @@ namespace MyOwnORM.Reflection
                         if (properyType.IsGenericType)
                         {
                             object entity = GetIncludeTypeAndSetValues(obj, name);
-                            string[] strs = reflectionHelper.MapListEntitiesPropertyValuesInString(entity, property.Name);
+                            string[] strs = reflectionHelper.MapListEntitiesPropertyValuesInString(entity);
                             string[] querIes = dbSetService.GenerateInsertSqlQueries(strs, property.Name);
                             queries.AddRange(querIes);
                         }
@@ -449,7 +542,14 @@ namespace MyOwnORM.Reflection
                 if (propertyName == "Id")
                     idValue = value.ToString();
 
-                property.SetValue(entity, value);
+                if (property.PropertyType == typeof(Guid))
+                {
+                    property.SetValue(entity, new Guid(idValue));
+                }
+                else
+                {
+                    property.SetValue(entity, value);
+                }
             }
         }
 
@@ -526,6 +626,32 @@ namespace MyOwnORM.Reflection
             return typeof(T).Name;
         }
 
+        public string GetTableName(object obj)
+        {
+            var tableAttribute = obj.GetType().GetCustomAttributes(
+                typeof(TableAttribute), true
+            ).FirstOrDefault() as TableAttribute;
+            if (tableAttribute != null)
+            {
+                return tableAttribute.Name;
+            }
+
+            return obj.GetType().Name;
+        }
+
+        public string GetTableName<TModel>(TModel obj)
+        {
+            var tableAttribute = obj.GetType().GetCustomAttributes(
+                typeof(TableAttribute), true
+            ).FirstOrDefault() as TableAttribute;
+            if (tableAttribute != null)
+            {
+                return tableAttribute.Name;
+            }
+
+            return typeof(TModel).Name;
+        }
+
         public string GetColumnName(PropertyInfo property)
         {
             object[] attrs = property.GetCustomAttributes(true);
@@ -539,6 +665,180 @@ namespace MyOwnORM.Reflection
             }
 
             return property.Name;
+        }
+
+        public bool HasNotMappedAttribute(PropertyInfo property)
+        {
+            object[] attrs = property.GetCustomAttributes(true);
+            foreach (var attr in attrs)
+            {
+                NotMappedAttribute columnAttribute = attr as NotMappedAttribute;
+                if (columnAttribute != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public bool HasCustomPKAttribute(PropertyInfo property)
+        {
+            object[] attrs = property.GetCustomAttributes(true);
+            foreach (var attr in attrs)
+            {
+                CustomPrimaryKeyAttribute columnAttribute = attr as CustomPrimaryKeyAttribute;
+                if (columnAttribute != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public bool HasColumnAttribute(PropertyInfo property)
+        {
+            object[] attrs = property.GetCustomAttributes(true);
+            foreach (var attr in attrs)
+            {
+                ColumnAttribute columnAttribute = attr as ColumnAttribute;
+                if (columnAttribute != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public bool IsPropertyOfModel(PropertyInfo propertyInfo, object obj)
+        {
+            return obj.GetType().IsAssignableFrom(propertyInfo.DeclaringType);
+        }
+
+        public bool IsClassInheritsAnotherClass(object obj)
+        {
+            return typeof(T).IsAssignableFrom(obj.GetType());
+        }
+
+        public string GetIdOfCustomPKAttribute(PropertyInfo property)
+        {
+            object[] attrs = property.GetCustomAttributes(true);
+            foreach (var attr in attrs)
+            {
+                CustomPrimaryKeyAttribute columnAttribute = attr as CustomPrimaryKeyAttribute;
+                if (columnAttribute != null)
+                {
+                    return columnAttribute.Id ?? property.Name;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        public string GetNameOfColumnAttribute(PropertyInfo property)
+        {
+            object[] attrs = property.GetCustomAttributes(true);
+            foreach (var attr in attrs)
+            {
+                ColumnAttribute columnAttribute = attr as ColumnAttribute;
+                if (columnAttribute != null)
+                {
+                    return columnAttribute.Column;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        public bool IsPropertyGuid(string property)
+        {
+            PropertyInfo prop = typeof(T).GetProperty(property);
+
+            if (prop.PropertyType == typeof(Guid))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        public string GetRealColumnName(string key)
+        {
+            PropertyInfo propertyInfo = typeof(T).GetProperty(key);
+            
+            if (HasColumnAttribute(propertyInfo))
+            {
+                return GetNameOfColumnAttribute(propertyInfo);
+            }
+            else if (HasCustomPKAttribute(propertyInfo))
+            {
+                return GetIdOfCustomPKAttribute(propertyInfo);
+            }
+
+            return key;
+        }
+
+        public string GetRealColumnName(string key, object obj)
+        {
+            foreach (PropertyInfo prop in obj.GetType().GetProperties())
+            {
+                if (prop.Name == key)
+                {
+                    if (HasColumnAttribute(prop))
+                    {
+                        return GetNameOfColumnAttribute(prop);
+                    }
+                    else if (HasCustomPKAttribute(prop))
+                    {
+                        return GetIdOfCustomPKAttribute(prop);
+                    }
+                    break;
+                }
+            }
+
+            return key;
+        }
+
+        public string GetRealColumnName<TModel>(string key, TModel obj)
+        {
+            foreach(PropertyInfo prop in obj.GetType().GetProperties())
+            {
+                if (prop.Name == key)
+                {
+                    if (HasColumnAttribute(prop))
+                    {
+                        return GetNameOfColumnAttribute(prop);
+                    }
+                    else if (HasCustomPKAttribute(prop))
+                    {
+                        return GetIdOfCustomPKAttribute(prop);
+                    }
+                    break;
+                }
+            }
+
+            return key;
+        }
+
+        public string GetRealFKName(object entity, string tableName) 
+        {
+            Type type = entity.GetType();
+            PropertyInfo[] properties = type.GetProperties();
+            foreach (var property in properties)
+            {
+                object[] attrs = property.GetCustomAttributes(true);
+                foreach (var attr in attrs)
+                {
+                    ForeignKeyAttribute columnAttribute = attr as ForeignKeyAttribute;
+                    if (columnAttribute != null && tableName == columnAttribute.TargetType.Name)
+                    {
+                        return property.Name;
+                    }
+                }
+            }
+            return string.Empty;
         }
     }
 }

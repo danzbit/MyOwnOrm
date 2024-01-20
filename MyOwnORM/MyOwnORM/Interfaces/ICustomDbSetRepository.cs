@@ -14,7 +14,7 @@ namespace MyOwnORM.Interface
         public Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>>[] includes);
         public Task<IQueryable<T>> WhereAsync(Expression<Func<T, bool>> predicate);
         public Task<T> GetByIdAsync(TKey id);
-        public Task InsertAsync(T obj);
+        public Task InsertAsync(object obj);
         public Task InsertCascadeAsync(T obj);
         public Task UpdateAsync(T obj);
         public Task UpdateCascadeAsync(T obj);

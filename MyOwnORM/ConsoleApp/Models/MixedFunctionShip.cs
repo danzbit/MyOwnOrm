@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace SeaBattleDomainModel.Models
 {
+    [Table("MixedFunctionShips")]
     internal class MixedFunctionShip : Ship, IShootable, IRepairable
     {
         public int MaxDistanceToShoot { get; set; }

@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 
 namespace SeaBattleDomainModel.Models
 {
-    [Table("Coord")]
     public class Coords
     {
         [CustomPrimaryKey("CoordId")]
@@ -18,17 +17,10 @@ namespace SeaBattleDomainModel.Models
         [Column("PointY")]
         public int Y { get; set; }
         [NotMapped]
-        public int Quadrant
-        {
-            get { return Quadrant; }
-            set
-            {
-                //логика сеттинга квадранта
-            }
-        } // квадрант в координатной четверти. не маппить в бд!! по 3нф
+        public int Quadrant { get; set; } // квадрант в координатной четверти. не маппить в бд!! по 3нф
+        [ForeignKey(typeof(Field))]
+        public string FieldId { get; set; }    
         [ForeignKey(typeof(Position))]
-        public int FieldId { get; set; }    
-        [ForeignKey(typeof(Position))]
-        public int PositionId { get; set; }
+        public string PostionId { get; set; }
     }
 }

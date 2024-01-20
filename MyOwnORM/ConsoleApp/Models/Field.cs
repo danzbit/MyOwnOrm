@@ -4,10 +4,9 @@ using SeaBattleDomainModel.Abstractions;
 
 namespace SeaBattleDomainModel.Models
 {
-    [Table("Field")]
     public class Field
     {
-        [CustomPrimaryKey("FieldId")]
+        [CustomPrimaryKey("Id")]
         public Guid Id { get; set; }
         [StringLength(56, ErrorMessage = "{0} value does not match the mask {1}.")]
         public string Name { get; set; }

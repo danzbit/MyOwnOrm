@@ -14,16 +14,18 @@ namespace MyOwnORM
     {
         private readonly string _connectionString;
         private readonly CustomDbSetReflection<T> dbSetReflection;
+        
         public CustomDbSetService(string connectionString)
         {
             _connectionString = connectionString;
+            dbSetReflection = new CustomDbSetReflection<T>();
         }
         public async Task<List<string>> FindTablesNameWithForeignKeysForCascadeDelete(string tableName)
         {
             List<string> res = new List<string>();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                await connection.OpenAsync();
+                connection.Open();
 
                 string query = $"SELECT " +
                     $"TP.name AS TableName " +
@@ -37,7 +39,7 @@ namespace MyOwnORM
                     $"RF.name = '{tableName}';";
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                    using (SqlDataReader reader = command.ExecuteReader())
                     {
                         while (await reader.ReadAsync())
                         {
@@ -56,7 +58,7 @@ namespace MyOwnORM
             List<string> res = new List<string>();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                await connection.OpenAsync();
+                connection.Open();
 
                 string query = $"SELECT " +
                     $"COL_NAME(FK.parent_object_id, FKC.parent_column_id) AS ForeignKeyColumnName " +
@@ -67,7 +69,7 @@ namespace MyOwnORM
                     $"WHERE RF.name = '{tableName}';";
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                    using (SqlDataReader reader = command.ExecuteReader())
                     {
                         while (await reader.ReadAsync())
                         {
@@ -98,6 +100,37 @@ namespace MyOwnORM
                 return memberExpression.Substring(1, memberExpression.Length - 2);
             }
             return memberExpression;
+        }
+        public string ExtractGuidStringFromExpression(Expression<Func<T, bool>> predicate)
+        {
+            if (predicate.Body is BinaryExpression binaryExpression)
+            {
+                if (binaryExpression.Left is MemberExpression memberExpression &&
+                    memberExpression.Member is PropertyInfo propertyInfo &&
+                    propertyInfo.PropertyType == typeof(Guid))
+                {
+                    object constantValue = null;
+
+                    if (binaryExpression.Right is ConstantExpression constantExpression)
+                    {
+                        constantValue = constantExpression.Value;
+                    }
+                    else if (binaryExpression.Right is MemberExpression closureMemberExpression)
+                    {
+                        if (closureMemberExpression.Member is FieldInfo fieldInfo)
+                        {
+                            object closureObject = ((ConstantExpression)closureMemberExpression.Expression).Value;
+                            constantValue = fieldInfo.GetValue(closureObject);
+                        }
+                    }
+
+                    if (constantValue is Guid guidValue)
+                    {
+                        return guidValue.ToString();
+                    }
+                }
+            }
+            return string.Empty;
         }
         public string GetPropertyValue(Expression<Func<T, object>> expression)
         {

@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 namespace SeaBattleDomainModel
 {
-    [Table("RepaireShip")]
+    [Table("RepairerShips")]
     internal class RepairerShip : Ship, IRepairable
     {
         [Column("DistanceToFixMax")]

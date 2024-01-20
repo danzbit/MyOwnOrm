@@ -1,5 +1,6 @@
 ﻿using MyOwnORM;
 using MyOwnORM.Attributes;
+using SeaBattleDomainModel.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,5 +17,7 @@ namespace SeaBattleDomainModel.Models
         public string Name { get; set; }
 
         public List<Coords> Points { get; set; }
+        [ForeignKey(typeof(Ship))]
+        public string ShipId { get; set; }
     }
 }
