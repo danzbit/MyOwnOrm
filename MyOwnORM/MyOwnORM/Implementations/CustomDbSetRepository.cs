@@ -19,21 +19,17 @@ namespace MyOwnORM.Implementations
         private string _connectionString;
         private string tableName;
         private readonly CustomDbSetService<T, TKey> dbSetExtension;
-        private readonly CustomDbSetReflection<T> dbSetReflection;
+        private readonly CustomDbSetReflection<T, TKey> dbSetReflection;
         public CustomDbSetRepository(string connectionString)
         {
             _connectionString = connectionString;
             dbSetExtension = new CustomDbSetService<T, TKey>(_connectionString);
-            dbSetReflection = new CustomDbSetReflection<T>(_connectionString);
+            dbSetReflection = new CustomDbSetReflection<T, TKey>(_connectionString);
             tableName = dbSetReflection.GetTableName();
         }
         public async Task<IEnumerable<T>> GetAllAsync()
         {
-            List<T> entities = new List<T>();
-
-            await dbSetExtension.GetAllAsyncQuery(tableName, entities);
-
-            return entities.AsQueryable();
+            return await dbSetExtension.GetAllAsyncQuery(tableName);
         }
 
         public async Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>> include)
@@ -41,11 +37,7 @@ namespace MyOwnORM.Implementations
             if (include is null)
                 throw new ArgumentNullException();
 
-            List<T> entities = new List<T>();
-
-            await dbSetExtension.IncludeAsyncQuery(include, tableName, entities);
-
-            return entities;
+            return await dbSetExtension.IncludeAsyncQuery(include, tableName); 
         }
 
         public async Task<IEnumerable<T>> IncludeAsync(Expression<Func<T, object>>[] includes)
@@ -53,23 +45,15 @@ namespace MyOwnORM.Implementations
             if (includes is null)
                 throw new ArgumentNullException();
 
-            List<T> entities = new List<T>();
-
-            await dbSetExtension.IncludeAsyncQuery(includes, tableName, entities);
-
-            return entities;
+            return await dbSetExtension.IncludeAsyncQuery(includes, tableName);
         }
 
-        public async Task<IQueryable<T>> WhereAsync(Expression<Func<T, bool>> predicate)
+        public async Task<IEnumerable<T>> WhereAsync(Expression<Func<T, bool>> predicate)
         {
             if (predicate is null)
                 throw new ArgumentNullException();
 
-            List<T> entities = new List<T>();
-
-            await dbSetExtension.WhereAsyncQuery(predicate, tableName, entities);
-
-            return entities.AsQueryable();
+            return await dbSetExtension.WhereAsyncQuery(predicate, tableName);
         }
 
         public async Task<T> GetByIdAsync(TKey id)
@@ -77,13 +61,8 @@ namespace MyOwnORM.Implementations
             if (id is null)
                 throw new ArgumentNullException();
 
-            T entity = dbSetReflection.CreateInstanceType();
-
-            await dbSetExtension.GetByIdAsyncQuery(tableName, id, entity);
-            
-            return entity;
+            return await dbSetExtension.GetByIdAsyncQuery(tableName, id);
         }
-
         public async Task InsertAsync(object obj)
         {
             if (obj is null)

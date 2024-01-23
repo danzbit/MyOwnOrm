@@ -15,10 +15,10 @@ using System.Threading.Tasks;
 
 namespace MyOwnORM.Reflection
 {
-    public class CustomDbSetReflection<T> where T : class
+    public class CustomDbSetReflection<T, TKey> where T : class
     {
-        private readonly CustomDbSetReflectionHelper<T> reflectionHelper;
-        private readonly CustomDbSetService<T> dbSetService;
+        private readonly CustomDbSetReflectionHelper<T, TKey> reflectionHelper;
+        private readonly CustomDbSetService<T, TKey> dbSetService;
 
         public CustomDbSetReflection()
         {
@@ -26,8 +26,8 @@ namespace MyOwnORM.Reflection
         }
         public CustomDbSetReflection(string connectionString)
         {
-            dbSetService = new CustomDbSetService<T>(connectionString);
-            reflectionHelper = new CustomDbSetReflectionHelper<T>();
+            dbSetService = new CustomDbSetService<T, TKey>(connectionString);
+            reflectionHelper = new CustomDbSetReflectionHelper<T, TKey>();
         }
 
         public T MapReaderToEntity(SqlDataReader reader)

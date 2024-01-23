@@ -5,6 +5,7 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Tasks;
 using MyOwnORM.Helper;
@@ -15,14 +16,14 @@ namespace MyOwnORM
     public class CustomDbSetService<T, TKey> where T : class
     {
         private readonly string _connectionString;
-        private readonly CustomDbSetReflection<T> dbSetReflection;
-        private readonly CustomDbSetReflectionHelper<T> reflectionHelper;
+        private readonly CustomDbSetReflection<T, TKey> dbSetReflection;
+        private readonly CustomDbSetReflectionHelper<T, TKey> reflectionHelper;
 
         public CustomDbSetService(string connectionString)
         {
             _connectionString = connectionString;
-            dbSetReflection = new CustomDbSetReflection<T>();
-            reflectionHelper = new CustomDbSetReflectionHelper<T>();
+            dbSetReflection = new CustomDbSetReflection<T, TKey>();
+            reflectionHelper = new CustomDbSetReflectionHelper<T, TKey>();
         }
         public async Task<List<string>> FindTablesNameWithForeignKeysForCascadeDelete(string tableName)
         {
@@ -151,8 +152,8 @@ namespace MyOwnORM
 
         public string GenerateInsertSqlQuery(string str, string tableName)
         {
-            return $"INSERT INTO {tableName} VALUES ({str})"; 
-        } 
+            return $"INSERT INTO {tableName} VALUES ({str})";
+        }
         public string[] GenerateInsertSqlQueries(string[] strs, string tableName)
         {
             List<string> res = new List<string>();
@@ -213,13 +214,41 @@ namespace MyOwnORM
         {
             return $"DELETE FROM {tableName} WHERE {key}={val}";
         }
-        public async Task GetAllAsyncQuery(string tableName, List<T> entities)
+
+        public async Task<List<T>> GetAllAsyncQuery(string tableName)
         {
+            string query = GetSelectQuery(tableName);
+            return await ExecuteQuery(query);
+        }
+
+        public async Task<List<T>> WhereAsyncQuery(Expression<Func<T, bool>> predicate, string tableName)
+        {
+            string key = GetKeyInLambdaExpression(predicate);
+            bool isGuid = dbSetReflection.IsPropertyGuid(key);
+            object val = isGuid ? $"'{ExtractGuidStringFromExpression(predicate)}'" : GetValueInLambdaExpression(predicate);
+            key = dbSetReflection.GetRealColumnName(key);
+
+            string query = GetSelectFilterQuery(tableName, key, val.ToString());
+            return await ExecuteQuery(query);
+        }
+
+        public async Task<T> GetByIdAsyncQuery(string tableName, TKey id)
+        {
+            T entity = Activator.CreateInstance<T>();
+            string idProperty = dbSetReflection.GetIdProperty(entity);
+            string pkChoose = id.GetType() == typeof(Guid) ? $"'{id}'" : $"{id}";
+
+            string query = GetSelectFilterQuery(tableName, idProperty, pkChoose);
+            List<T> result = await ExecuteQuery(query);
+            return result.FirstOrDefault();
+        }
+
+        private async Task<List<T>> ExecuteQuery(string query)
+        {
+            List<T> entities = new List<T>();
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
-
-                string query = GetSelectQuery(tableName);
 
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
@@ -233,19 +262,27 @@ namespace MyOwnORM
                     }
                 }
             }
+
+            return entities;
         }
-        public async Task IncludeAsyncQuery(Expression<Func<T, object>> include, string tableName, List<T> entities)
+        public async Task<List<T>> IncludeAsyncQuery(Expression<Func<T, object>> include, string tableName)
         {
+            string sql = GetSelectQuery(tableName);
+
+            return await ExecuteIncludeReader(include, sql);
+        }
+
+        private async Task<List<T>> ExecuteIncludeReader(Expression<Func<T, object>> include, string sql)
+        {
+            List<T> entities = new List<T>();
             string propVal = GetPropertyValue(include);
             object includeType = dbSetReflection.GetIncludeType(include);
-
+            string idValue = string.Empty;
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
 
-                string sql = GetSelectQuery(tableName);
                 SqlCommand command = new SqlCommand(sql, connection);
-                string idValue = string.Empty;
 
                 using (SqlDataReader reader = command.ExecuteReader())
                 {
@@ -289,163 +326,118 @@ namespace MyOwnORM
                     }
                 }
             }
+            return entities;
         }
 
-        public async Task IncludeAsyncQuery(Expression<Func<T, object>>[] includes, string tableName, List<T> entities)
+        public async Task<List<T>> IncludeAsyncQuery(Expression<Func<T, object>>[] includes, string tableName)
         {
+            string sql = GetSelectQuery(tableName);
+
+            return await ExecuteIncludeReader(includes, sql);
+        }
+
+        private async Task<List<T>> ExecuteIncludeReader(Expression<Func<T, object>>[] includes, string sql)
+        {
+            List<T> entities = new List<T>();
+            string idValue = string.Empty;
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
 
-                string sql = GetSelectQuery(tableName);
-                SqlCommand command = new SqlCommand(sql, connection);
-                string idValue = string.Empty;
-
-                using (SqlDataReader reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        T entity = dbSetReflection.CreateInstanceType();
-
-                        dbSetReflection.SetPropertiesForIncludeExpressionsMethod(reader, idValue, entity);
-
-                        foreach (var include in includes)
-                        {
-                            List<string> propVal = dbSetReflection.GetPropertyValues(new Expression<Func<T, object>>[] { include });
-                            object[] includeType = dbSetReflection.GetIncludeTypes(new Expression<Func<T, object>>[] { include });
-
-                            for (int i = 0; i < propVal.Count; i++)
-                            {
-                                PropertyInfo propertyInfo = dbSetReflection.GetPropertyInfo(propVal[i]);
-                                Type propertyType = propertyInfo.PropertyType;
-
-                                if (dbSetReflection.IsCollectionType(propertyInfo))
-                                {
-                                    SetGenericEntityIncludeExpressionsMethod(propertyInfo, includeType[i].GetType(), entity, idValue, reader);
-                                }
-                                else
-                                {
-                                    SetEntityIncludeExpressionsMethod(includeType[i].GetType(), entity, propertyInfo, idValue, reader, propertyType);
-                                }
-                            }
-                        }
-
-                        entities.Add(entity);
-                    }
-                }
-            }
-        }
-
-        public async Task WhereAsyncQuery(Expression<Func<T, bool>> predicate, string tableName, List<T> entities)
-        {
-            using (SqlConnection connection = new SqlConnection(_connectionString))
-            {
-                connection.Open();
-
-                string key = GetKeyInLambdaExpression(predicate);
-                bool isGuid = dbSetReflection.IsPropertyGuid(key);
-                object val = new object();
-                if (isGuid)
-                {
-                    val = $"'{ExtractGuidStringFromExpression(predicate)}'";
-                }
-                else
-                {
-                    val = GetValueInLambdaExpression(predicate);
-                }
-
-                key = dbSetReflection.GetRealColumnName(key);
-
-                string query = GetSelectFilterQuery(tableName, key, val.ToString());
-                using (SqlCommand command = new SqlCommand(query, connection))
+                using (SqlCommand command = new SqlCommand(sql, connection))
                 {
                     using (SqlDataReader reader = command.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            T entity = dbSetReflection.MapReaderToEntity(reader);
+                            T entity = dbSetReflection.CreateInstanceType();
+                            dbSetReflection.SetPropertiesForIncludeExpressionsMethod(reader, idValue, entity);
+
+                            foreach (var include in includes)
+                            {
+                                List<string> propVal = dbSetReflection.GetPropertyValues(new Expression<Func<T, object>>[] { include });
+                                object[] includeType = dbSetReflection.GetIncludeTypes(new Expression<Func<T, object>>[] { include });
+
+                                for (int i = 0; i < propVal.Count; i++)
+                                {
+                                    PropertyInfo propertyInfo = dbSetReflection.GetPropertyInfo(propVal[i]);
+                                    Type propertyType = propertyInfo.PropertyType;
+
+                                    if (dbSetReflection.IsCollectionType(propertyInfo))
+                                    {
+                                        SetGenericEntityIncludeExpressionsMethod(propertyInfo, includeType[i].GetType(), entity, idValue, reader);
+                                    }
+                                    else
+                                    {
+                                        SetEntityIncludeExpressionsMethod(includeType[i].GetType(), entity, propertyInfo, idValue, reader, propertyType);
+                                    }
+                                }
+                            }
+
                             entities.Add(entity);
                         }
                     }
                 }
             }
-        }
 
-        public async Task GetByIdAsyncQuery(string tableName, TKey id, T entity)
-        {
-            string idProperty = dbSetReflection.GetIdProperty(entity);
-
-            string pkChoose = id.GetType() == typeof(Guid) ? $"'{id}'" : $"{id}";
-
-            using (SqlConnection connection = new SqlConnection(_connectionString))
-            {
-                connection.Open();
-
-                string query = GetSelectFilterQuery(tableName, idProperty, pkChoose);
-                using (SqlCommand command = new SqlCommand(query, connection))
-                {
-                    using (SqlDataReader reader = command.ExecuteReader())
-                    {
-                        if (await reader.ReadAsync())
-                        {
-                            T type = dbSetReflection.MapReaderToEntity(reader);
-                            entity = type;
-                        }
-                    }
-                }
-            }
+            return entities; 
         }
 
         public async Task InsertAsyncQuery(object obj, string tableName)
         {
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            if (obj.GetType() == typeof(T))
             {
-                connection.Open();
+                string values = reflectionHelper.MapEntityPropertyValuesInString((T)obj);
 
-                if (obj.GetType() == typeof(T))
-                {
-                    string values = reflectionHelper.MapEntityPropertyValuesInString((T)obj);
+                string query = GetInsertIntoQuery(tableName, values);
 
-                    string query = GetInsertIntoQuery(tableName, values);
+                await ExecuteNonQuery(query);
+            }
+            else if (dbSetReflection.IsClassInheritsAnotherClass(obj))
+            {
+                string[] values = reflectionHelper.MapEntityPropertyValuesInString(obj);
+                string query = GetInsertIntoQuery(tableName, values[0]);
 
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        await command.ExecuteNonQueryAsync();
-                    }
-                }
-                else if (dbSetReflection.IsClassInheritsAnotherClass(obj))
-                {
-                    string[] values = reflectionHelper.MapEntityPropertyValuesInString(obj);
-                    string query = GetInsertIntoQuery(tableName, values[0]);
+                await ExecuteNonQuery(query);
 
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.ExecuteNonQuery();
-                    }
-
-                    string querySecond = GetInsertIntoQuery(dbSetReflection.GetTableName(obj), values[1]);
-                    using (SqlCommand commandSecond = new SqlCommand(querySecond, connection))
-                    {
-                        await commandSecond.ExecuteNonQueryAsync();
-                    }
-                }
+                string querySecond = GetInsertIntoQuery(dbSetReflection.GetTableName(obj), values[1]);
+                await ExecuteNonQuery(querySecond);
             }
         }
 
         public async Task InsertCascadeAsyncQuery(T obj, string tableName)
         {
             string[] names = dbSetReflection.GetNamesOfCollectionOrModel();
+
+            string values = reflectionHelper.MapEntityPropertyValuesInString(obj, names);
+            string idNameEntity = dbSetReflection.GetIdProperty(obj);
+            object idEntity = dbSetReflection.GetIdPropertyValue(obj);
+
+            string checkQuery = GetSelectFilterQuery(tableName, idNameEntity, idEntity.ToString());
+
+            bool hasRowInDataBase = await ExecuteNonCascadeQuery(checkQuery, idNameEntity);
+
+            if (!hasRowInDataBase)
+            {
+                string query = GetInsertIntoQuery(tableName, values);
+
+                await ExecuteNonQuery(query);
+            }
+
+            string[] queries = dbSetReflection.InsertCascadeModelsOrCollection(obj, names);
+
+            for (int i = 0; i < queries.Length; i++)
+            {
+                await ExecuteNonQuery(queries[i]);
+            }
+        }
+
+        private async Task<bool> ExecuteNonCascadeQuery(string checkQuery, string idNameEntity)
+        {
+            bool hasRowInDataBase = false;
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                bool hasRowInDataBase = false;
                 connection.Open();
-
-                string values = reflectionHelper.MapEntityPropertyValuesInString(obj, names);
-                string idNameEntity = dbSetReflection.GetIdProperty(obj);
-                object idEntity = dbSetReflection.GetIdPropertyValue(obj);
-
-                string checkQuery = GetSelectFilterQuery(tableName, idNameEntity, idEntity.ToString());
-
                 using (SqlCommand commandCheck = new SqlCommand(checkQuery, connection))
                 {
                     using (SqlDataReader reader = commandCheck.ExecuteReader())
@@ -456,28 +448,25 @@ namespace MyOwnORM
                             if (id == null)
                             {
                                 hasRowInDataBase = true;
-                                break;
+                                return hasRowInDataBase;
                             }
                         }
                     }
                 }
+            }
 
-                if (!hasRowInDataBase)
+            return hasRowInDataBase;
+        }
+        private async Task ExecuteNonQuery(string query)
+        {
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                connection.Open();
+
+                using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    string query = GetInsertIntoQuery(tableName, values);
-
-                    SqlCommand command = new SqlCommand(query, connection);
                     command.ExecuteNonQuery();
                 }
-
-                string[] queries = dbSetReflection.InsertCascadeModelsOrCollection(obj, names);
-
-                for (int i = 0; i < queries.Length; i++)
-                {
-                    SqlCommand commandCascade = new SqlCommand(queries[i], connection);
-                    commandCascade.ExecuteNonQuery();
-                }
-
             }
         }
 
@@ -488,35 +477,28 @@ namespace MyOwnORM
             if (string.IsNullOrEmpty(idProperty))
                 throw new NullReferenceException(nameof(idProperty));
 
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            if (obj.GetType() == typeof(T))
             {
-                connection.Open();
+                string updateStr = reflectionHelper.MapEntityPropertyValuesInUpdateString(idProperty, obj);
+                object idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
 
-                if (obj.GetType() == typeof(T))
-                {
-                    string updateStr = reflectionHelper.MapEntityPropertyValuesInUpdateString(idProperty, obj);
-                    object idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
+                string query = GetUpdateQuery(tableName, updateStr, idProperty, idPropertyValue.ToString());
 
-                    string query = GetUpdateQuery(tableName, updateStr, idProperty, idPropertyValue.ToString());
-
-                    SqlCommand command = new SqlCommand(query, connection);
-                    command.ExecuteNonQuery();
-                }
-                else if (dbSetReflection.IsClassInheritsAnotherClass(obj))
-                {
-                    string[] updateStrs = reflectionHelper.MapEntityPropertyValuesInUpdateStringTPT(idProperty, obj);
-                    object idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
-
-                    string query = GetUpdateQuery(tableName, updateStrs[0], idProperty, idPropertyValue.ToString());
-
-                    SqlCommand command = new SqlCommand(query, connection);
-                    command.ExecuteNonQuery();
-
-                    string querySecond = GetUpdateQuery(dbSetReflection.GetTableName(obj), updateStrs[1], idProperty, idPropertyValue.ToString());
-                    SqlCommand commandSecond = new SqlCommand(querySecond, connection);
-                    commandSecond.ExecuteNonQuery();
-                }
+                await ExecuteNonQuery(query);
             }
+            else if (dbSetReflection.IsClassInheritsAnotherClass(obj))
+            {
+                string[] updateStrs = reflectionHelper.MapEntityPropertyValuesInUpdateStringTPT(idProperty, obj);
+                object idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
+
+                string query = GetUpdateQuery(tableName, updateStrs[0], idProperty, idPropertyValue.ToString());
+
+                await ExecuteNonQuery(query);
+
+                string querySecond = GetUpdateQuery(dbSetReflection.GetTableName(obj), updateStrs[1], idProperty, idPropertyValue.ToString());
+                await ExecuteNonQuery(querySecond);
+            }
+
         }
         public async Task UpdateCascadeAsyncQuery(T obj, string tableName)
         {
@@ -526,137 +508,93 @@ namespace MyOwnORM
             if (string.IsNullOrEmpty(idProperty))
                 throw new NullReferenceException(nameof(idProperty));
 
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            string updateStr = reflectionHelper.MapEntityPropertyValuesInUpdateString(idProperty, obj);
+            object idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
+
+            string query = GetUpdateQuery(tableName, updateStr, idProperty, idPropertyValue.ToString());
+
+            await ExecuteNonQuery(query);
+
+            string[] queries = dbSetReflection.UpdateCascadeModelsOrCollection(obj, names, idProperty, idPropertyValue.ToString());
+
+            for (int i = 0; i < queries.Length; i++)
             {
-                connection.Open();
-
-                string updateStr = reflectionHelper.MapEntityPropertyValuesInUpdateString(idProperty, obj);
-                object idPropertyValue = dbSetReflection.GetIdPropertyValue(obj);
-
-                string query = GetUpdateQuery(tableName, updateStr, idProperty, idPropertyValue.ToString());
-
-                SqlCommand command = new SqlCommand(query, connection);
-                command.ExecuteNonQuery();
-
-                string[] queries = dbSetReflection.UpdateCascadeModelsOrCollection(obj, names, idProperty, idPropertyValue.ToString());
-
-                for (int i = 0; i < queries.Length; i++)
-                {
-                    SqlCommand commandCascade = new SqlCommand(queries[i], connection);
-                    commandCascade.ExecuteNonQuery();
-                }
+                await ExecuteNonQuery(queries[i]);
             }
         }
         public async Task DeleteAsyncQuery(Expression<Func<T, bool>> predicate, string tableName)
         {
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            string key = GetKeyInLambdaExpression(predicate);
+            bool isGuid = dbSetReflection.IsPropertyGuid(key);
+            object val = new object();
+            if (isGuid)
             {
-                connection.Open();
-
-                string key = GetKeyInLambdaExpression(predicate);
-                bool isGuid = dbSetReflection.IsPropertyGuid(key);
-                object val = new object();
-                if (isGuid)
-                {
-                    val = $"'{ExtractGuidStringFromExpression(predicate)}'";
-                }
-                else
-                {
-                    val = GetValueInLambdaExpression(predicate);
-                }
-
-                key = dbSetReflection.GetRealColumnName(key);
-
-                string query = GetDeleteQuery(tableName, key, val.ToString());
-
-                SqlCommand command = new SqlCommand(query, connection);
-                await command.ExecuteNonQueryAsync();
+                val = $"'{ExtractGuidStringFromExpression(predicate)}'";
             }
+            else
+            {
+                val = GetValueInLambdaExpression(predicate);
+            }
+
+            key = dbSetReflection.GetRealColumnName(key);
+
+            string query = GetDeleteQuery(tableName, key, val.ToString());
+
+            await ExecuteNonQuery(query);
         }
         public async Task DeleteByIdAsyncQuery(TKey id, string tableName)
         {
-            T entity = Activator.CreateInstance<T>();
+            T entity = dbSetReflection.CreateInstanceType();
             string idProperty = dbSetReflection.GetIdProperty(entity);
-            using (SqlConnection connection = new SqlConnection(_connectionString))
-            {
-                connection.Open();
-                string pkChoose = id.GetType() == typeof(Guid) ? $"'{id}'" : $"{id}";
+            string pkChoose = id.GetType() == typeof(Guid) ? $"'{id}'" : $"{id}";
 
-                string query = GetDeleteQuery(tableName, idProperty, pkChoose);
+            string query = GetDeleteQuery(tableName, idProperty, pkChoose);
 
-                SqlCommand command = new SqlCommand(query, connection);
-                await command.ExecuteNonQueryAsync();
-            }
+            await ExecuteNonQuery(query);
         }
         public async Task DeleteCascadeAsyncQuery(Expression<Func<T, bool>> predicate, string tableName)
         {
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            string key = GetKeyInLambdaExpression(predicate);
+            bool isGuid = dbSetReflection.IsPropertyGuid(key);
+            object val = new object();
+            if (isGuid)
             {
-                connection.Open();
-
-                string key = GetKeyInLambdaExpression(predicate);
-                bool isGuid = dbSetReflection.IsPropertyGuid(key);
-                object val = new object();
-                if (isGuid)
-                {
-                    val = $"'{ExtractGuidStringFromExpression(predicate)}'";
-                }
-                else
-                {
-                    val = GetValueInLambdaExpression(predicate);
-                }
-
-                key = dbSetReflection.GetRealColumnName(key);
-                List<string> tables = await FindTablesNameWithForeignKeysForCascadeDelete(typeof(T).Name);
-                List<string> fks = await FindForeignKeysNameInTablesForCascadeDelete(typeof(T).Name);
-
-                for (int i = 0; i < tables.Count; i++)
-                {
-                    string cascadeDeleteQuery = GetDeleteQuery(tables[i], fks[i], val.ToString().ToUpper());
-                    SqlCommand commandCascadeDelete = new SqlCommand(cascadeDeleteQuery, connection);
-                    commandCascadeDelete.ExecuteNonQuery();
-                }
-
-                string query = GetDeleteQuery(tableName, key, val.ToString());
-
-                SqlCommand command = new SqlCommand(query, connection);
-                await command.ExecuteNonQueryAsync();
+                val = $"'{ExtractGuidStringFromExpression(predicate)}'";
             }
+            else
+            {
+                val = GetValueInLambdaExpression(predicate);
+            }
+
+            key = dbSetReflection.GetRealColumnName(key);
+            List<string> tables = await FindTablesNameWithForeignKeysForCascadeDelete(typeof(T).Name);
+            List<string> fks = await FindForeignKeysNameInTablesForCascadeDelete(typeof(T).Name);
+
+            for (int i = 0; i < tables.Count; i++)
+            {
+                string cascadeDeleteQuery = GetDeleteQuery(tables[i], fks[i], val.ToString().ToUpper());
+                await ExecuteNonQuery(cascadeDeleteQuery);
+            }
+
+            string query = GetDeleteQuery(tableName, key, val.ToString());
+
+            await ExecuteNonQuery(query);
         }
 
         public async Task<object> FromSqlRawAsyncQuery(string sql)
         {
             string keyWord = sql.Split()[0] + sql.Split()[1];
-            List<T> entities = new List<T>();
-
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            if (keyWord.ToLower() == "select*")
             {
-                connection.Open();
-                using (SqlCommand command = new SqlCommand(sql, connection))
-                {
-                    if (keyWord.ToLower() == "select*")
-                    {
-                        using (SqlDataReader reader = command.ExecuteReader())
-                        {
-                            while (await reader.ReadAsync())
-                            {
-                                T entity = dbSetReflection.MapReaderToEntity(reader);
-                                entities.Add(entity);
-                            }
-                        }
+                List<T> result = await ExecuteQuery(sql);
 
-                        return entities;
-                    }
-                    else if (keyWord.ToLower() == "update" || keyWord.ToLower() == "insert" || keyWord.ToLower() == "delete")
-                    {
-                        await command.ExecuteNonQueryAsync();
-                    }
-                    else
-                    {
-                        await command.ExecuteScalarAsync();
-                    }
-                }
+                return result;
             }
+            else if (keyWord.ToLower() == "update" || keyWord.ToLower() == "insert" || keyWord.ToLower() == "delete")
+            {
+                await ExecuteNonQuery(sql);
+            }
+
             return null;
         }
 

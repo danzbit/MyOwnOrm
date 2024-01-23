@@ -9,12 +9,12 @@ using System.Threading.Tasks;
 
 namespace MyOwnORM.Helper
 {
-    public class CustomDbSetReflectionHelper<T> where T : class
+    public class CustomDbSetReflectionHelper<T, TKey> where T : class
     {
-        private readonly CustomDbSetReflection<T> dbSetReflection;
+        private readonly CustomDbSetReflection<T, TKey> dbSetReflection;
         public CustomDbSetReflectionHelper()
         {
-            dbSetReflection = new CustomDbSetReflection<T>();
+            dbSetReflection = new CustomDbSetReflection<T, TKey>();
         }
         public string MapEntityPropertyValuesInString(T obj)
         {
